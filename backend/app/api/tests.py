@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
+from io import BytesIO
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
@@ -37,6 +40,7 @@ from app.schemas.tests import (
 )
 from app.services.ai import ai_service
 from app.services.evaluation import evaluate_answers
+from app.services.tts import TTSProviderUnavailableError, TTSServiceError, tts_service
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 
@@ -193,6 +197,42 @@ def get_test(test_id: int, db: DBSession, current_user: CurrentUser) -> TestResp
     test = _load_test(db, test_id)
     _assert_access(test, current_user)
     return _build_test_response(test)
+
+
+@router.get("/{test_id}/questions/{question_id}/tts")
+def get_question_tts_audio(
+    test_id: int,
+    question_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+    voice: str | None = None,
+) -> StreamingResponse:
+    test = _load_test(db, test_id)
+    _assert_access(test, current_user)
+
+    question = next((item for item in test.questions if item.id == question_id), None)
+    if not question:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+
+    text = _build_question_tts_narration(question=question, language=test.language)
+    if not text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question text is empty")
+
+    try:
+        audio = tts_service.synthesize(text=text, language=test.language, voice=voice)
+    except TTSProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except TTSServiceError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    return StreamingResponse(
+        BytesIO(audio.audio_bytes),
+        media_type=audio.content_type,
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'inline; filename="test-{test_id}-q-{question_id}.mp3"',
+        },
+    )
 
 
 @router.post("/{test_id}/submit", response_model=SubmitTestResponse)
@@ -489,6 +529,66 @@ def _build_test_response(test: Test) -> TestResponse:
         created_at=test.created_at,
         questions=questions,
     )
+
+
+def _build_question_tts_narration(*, question: Question, language: PreferredLanguage) -> str:
+    parts: list[str] = []
+
+    base = str(question.tts_text or question.prompt or "").strip()
+    base = _strip_prompt_variant_suffix(base)
+    if base:
+        parts.append(base)
+
+    options = []
+    if isinstance(question.options_json, dict):
+        options = list(question.options_json.get("options", []) or [])
+    if options:
+        parts.append("Жауап нұсқалары:" if language == PreferredLanguage.kz else "Варианты ответа:")
+        for option in options:
+            if not isinstance(option, dict):
+                continue
+            option_id = option.get("id")
+            label = _extract_option_label(str(option.get("text", "")).strip(), option_id if isinstance(option_id, int) else 0)
+            text = _strip_option_prefix(str(option.get("text", "")).strip())
+            if text:
+                parts.append(f"{label}. {text}.")
+
+    left_items: list[str] = []
+    right_items: list[str] = []
+    if isinstance(question.options_json, dict):
+        left_items = [str(item).strip() for item in (question.options_json.get("left", []) or []) if str(item).strip()]
+        right_items = [str(item).strip() for item in (question.options_json.get("right", []) or []) if str(item).strip()]
+    if left_items and right_items:
+        if language == PreferredLanguage.kz:
+            parts.append("Сол жақтағы элементтер:")
+            parts.append(". ".join(left_items) + ".")
+            parts.append("Оң жақтағы элементтер:")
+            parts.append(". ".join(right_items) + ".")
+        else:
+            parts.append("Элементы слева:")
+            parts.append(". ".join(left_items) + ".")
+            parts.append("Элементы справа:")
+            parts.append(". ".join(right_items) + ".")
+
+    return " ".join(part for part in parts if part).strip()
+
+
+def _strip_prompt_variant_suffix(text: str) -> str:
+    return re.sub(r"\s*\((вариант|нұсқа)\s*\d+\)\s*$", "", text, flags=re.IGNORECASE).strip()
+
+
+def _extract_option_label(text: str, option_id: int) -> str:
+    match = re.match(r"^\s*([A-Z])\s*[\).:-]", text, flags=re.IGNORECASE)
+    if match and match.group(1):
+        return match.group(1).upper()
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    if 0 <= option_id < len(letters):
+        return letters[option_id]
+    return "?"
+
+
+def _strip_option_prefix(text: str) -> str:
+    return re.sub(r"^\s*[A-ZА-Я]\s*[\).:-]\s*", "", text, flags=re.IGNORECASE).strip()
 
 
 def _normalize_warning_events(events: list[TestWarningSignal]) -> list[dict]:

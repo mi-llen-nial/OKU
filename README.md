@@ -7,7 +7,7 @@ OKU — персонализированная система экзаменов
 - DB: PostgreSQL
 - Frontend: Next.js 14 (responsive)
 - AI: `mock` или DeepSeek (`deepseek-chat`)
-- STT/TTS: mock-интерфейсы (готовы для реального провайдера)
+- STT/TTS: `auto` (бесплатный `edge-tts`) или ElevenLabs
 
 ## E2E поток
 1. Регистрация/логин (`student` / `teacher`)
@@ -41,6 +41,13 @@ GRANT ALL PRIVILEGES ON DATABASE oku TO oku;
 - `DATABASE_URL=postgresql+psycopg://oku:oku@localhost:5432/oku`
 - `NEXT_PUBLIC_API_URL=http://localhost:8000`
 - `AI_PROVIDER=mock` (или `deepseek` + `DEEPSEEK_API_KEY`)
+- `TTS_PROVIDER=auto` (по умолчанию: бесплатный `edge-tts`, без API ключа)
+- `TTS_PROVIDER=edge_tts` (принудительно использовать бесплатный серверный TTS)
+- `EDGE_TTS_VOICE_RU=ru-RU-SvetlanaNeural` (опционально)
+- `EDGE_TTS_VOICE_KZ=kk-KZ-AigulNeural` (опционально)
+- `TTS_PROVIDER=elevenlabs` для более реалистичного коммерческого TTS
+- `ELEVENLABS_API_KEY=<your_key>`
+- `ELEVENLABS_VOICE_ID_RU=<voice_id>` (и опционально `ELEVENLABS_VOICE_ID_KZ=<voice_id>`)
 
 ### 4) Установка зависимостей
 ```bash
@@ -115,6 +122,7 @@ cd /Users/mellennial/Programming/KOMA/oku
 - `POST /tests/generate`
 - `GET /tests/{id}`
 - `POST /tests/{id}/submit`
+- `GET /tests/{id}/questions/{question_id}/tts`
 - `GET /tests/{id}/result`
 - `POST /tests/{id}/recommendations/regenerate`
 - `GET /students/me/history`

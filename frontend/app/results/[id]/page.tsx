@@ -59,7 +59,7 @@ export default function ResultPage() {
         subtitle: item.is_correct ? "Верно" : "Ошибка",
         content: (
           <>
-            <div><b>Вопрос:</b> {item.prompt}</div>
+            <div><b>Вопрос:</b> {sanitizeQuestionPrompt(item.prompt)}</div>
             <div><b>Балл:</b> {item.score}</div>
             <div><b>Пояснение:</b> {item.explanation}</div>
           </>
@@ -175,4 +175,8 @@ function formatDuration(totalSeconds: number): string {
     .padStart(2, "0");
   const seconds = (safe % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+function sanitizeQuestionPrompt(prompt: string): string {
+  return prompt.replace(/\s*\((вариант|нұсқа)\s*\d+\)\s*$/i, "").trim();
 }

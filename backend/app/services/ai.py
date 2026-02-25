@@ -107,6 +107,17 @@ class AIService:
                     fallback_groups=fallback_sources,
                     target_count=num_questions,
                 )
+            if len(merged) < num_questions:
+                merged = self._top_up_unique_questions(
+                    current=merged,
+                    subject=subject,
+                    difficulty=difficulty,
+                    language=language,
+                    mode=mode,
+                    target_count=num_questions,
+                    focus_topics=normalized_focus_topics,
+                    seed=f"{seed}-unique-topup",
+                )
             return GeneratedTestPayload(seed=seed, questions=merged[:num_questions])
 
         return self._generate_non_library_test(
@@ -192,13 +203,90 @@ class AIService:
                 if len(output) >= target_count:
                     return output[:target_count]
 
-        # If unique items are still not enough, allow repeats to keep payload size stable.
-        for group in fallback_groups:
-            for item in group:
-                output.append(item)
-                if len(output) >= target_count:
-                    return output[:target_count]
+        return output[:target_count]
 
+    def _top_up_unique_questions(
+        self,
+        *,
+        current: Sequence[GeneratedQuestionPayload],
+        subject: Subject,
+        difficulty: DifficultyLevel,
+        language: PreferredLanguage,
+        mode: TestMode,
+        target_count: int,
+        focus_topics: Sequence[str],
+        seed: str,
+    ) -> list[GeneratedQuestionPayload]:
+        output = list(current)
+        if len(output) >= target_count:
+            return output[:target_count]
+
+        for attempt in range(4):
+            needed = target_count - len(output)
+            if needed <= 0:
+                break
+            extra = self._generate_non_library_test(
+                subject=subject,
+                difficulty=difficulty,
+                language=language,
+                mode=mode,
+                num_questions=max(needed * 3, needed + 3),
+                seed=f"{seed}-{attempt}",
+                focus_topics=focus_topics,
+            )
+            output = self._merge_unique_questions(
+                groups=[output, extra.questions],
+                target_count=target_count,
+            )
+
+        if len(output) >= target_count:
+            return output[:target_count]
+
+        # Final fallback: synthesize unique prompts locally.
+        rng = random.Random(f"{seed}-force")
+        existing_prompt_keys = {self._prompt_key(item.prompt) for item in output}
+        forced: list[GeneratedQuestionPayload] = []
+        topic_pool = self._topic_pool(subject=subject, language=language, focus_topics=focus_topics)
+        max_attempts = max(80, (target_count - len(output)) * 20)
+
+        for idx in range(max_attempts):
+            if len(output) + len(forced) >= target_count:
+                break
+            topic = rng.choice(topic_pool)
+            qtype = self._pick_question_type(difficulty=difficulty, mode=mode, rng=rng)
+            candidate = self._build_question(
+                index=10_000 + idx,
+                subject=subject,
+                topic=topic,
+                qtype=qtype,
+                language=language,
+                mode=mode,
+                difficulty=difficulty,
+                rng=rng,
+            )
+            sanitized = self._sanitize_questions(
+                questions=[candidate],
+                subject=subject,
+                difficulty=difficulty,
+                language=language,
+                mode=mode,
+                target_count=1,
+                focus_topics=focus_topics,
+                existing_prompt_keys=existing_prompt_keys,
+            )
+            if not sanitized:
+                continue
+            item = sanitized[0]
+            key = self._prompt_key(item.prompt)
+            if key in existing_prompt_keys:
+                continue
+            existing_prompt_keys.add(key)
+            forced.append(item)
+
+        output = self._merge_unique_questions(
+            groups=[output, forced],
+            target_count=target_count,
+        )
         return output[:target_count]
 
     @staticmethod
@@ -854,16 +942,7 @@ Seed уникальности: {seed}
 
     @staticmethod
     def _variant_prompt(prompt: str, *, language: PreferredLanguage, variant_index: int) -> str:
-        normalized_prompt = prompt.strip()
-        if not normalized_prompt:
-            return normalized_prompt
-        if variant_index <= 0:
-            return normalized_prompt
-
-        suffix = f"(вариант {variant_index})" if language == PreferredLanguage.ru else f"(нұсқа {variant_index})"
-        if suffix.lower() in normalized_prompt.lower():
-            return normalized_prompt
-        return f"{normalized_prompt} {suffix}"
+        return prompt.strip()
 
     @staticmethod
     def _format_quadratic(a: int, b: int, c: int) -> str:
@@ -2101,7 +2180,10 @@ Seed уникальности: {seed}
 
     @staticmethod
     def _prompt_key(prompt: str) -> str:
-        return re.sub(r"\s+", " ", prompt.lower()).strip()
+        normalized = re.sub(r"\s+", " ", prompt.lower()).strip()
+        normalized = re.sub(r"\s*\((вариант|нұсқа)\s*\d+\)\s*$", "", normalized, flags=re.IGNORECASE).strip()
+        normalized = re.sub(r"[.!?…]+$", "", normalized).strip()
+        return normalized
 
     def _fallback_option_texts(self, *, topic: str, language: PreferredLanguage, count: int) -> list[str]:
         if language == PreferredLanguage.ru:

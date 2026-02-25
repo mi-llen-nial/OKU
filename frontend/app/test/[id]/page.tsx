@@ -10,7 +10,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import ProgressBar from "@/components/ui/ProgressBar";
-import { getTest, submitTest } from "@/lib/api";
+import { getQuestionTtsAudio, getTest, submitTest } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { OptionItem, Question, Test } from "@/lib/types";
 import styles from "@/app/test/[id]/runner.module.css";
@@ -38,10 +38,14 @@ export default function TestRunnerPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [integrityWarnings, setIntegrityWarnings] = useState<TestIntegrityWarning[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const audioObjectUrlRef = useRef<string | null>(null);
+  const ttsRequestIdRef = useRef(0);
   const elapsedRef = useRef(0);
   const warningsRef = useRef<TestIntegrityWarning[]>([]);
   const textFocusAtRef = useRef<Record<number, number>>({});
@@ -150,14 +154,28 @@ export default function TestRunnerPage() {
   );
 
   const stopAudio = useCallback(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
+    ttsRequestIdRef.current += 1;
+
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.src = "";
+      audioElementRef.current = null;
+    }
+    if (audioObjectUrlRef.current && typeof window !== "undefined") {
+      URL.revokeObjectURL(audioObjectUrlRef.current);
+      audioObjectUrlRef.current = null;
+    }
+
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
     utteranceRef.current = null;
+    setAudioLoading(false);
     setAudioPlaying(false);
   }, []);
 
-  const speakQuestion = useCallback(
-    (targetQuestion: Question) => {
+  const speakWithBrowserTTS = useCallback(
+    (targetQuestion: Question, fallbackMessage?: string) => {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) {
         setAudioError("На этом устройстве озвучка недоступна.");
         return;
@@ -166,7 +184,7 @@ export default function TestRunnerPage() {
       const text = buildAudioNarration(targetQuestion, test?.language || "RU");
       if (!text) return;
 
-      setAudioError("");
+      setAudioError(fallbackMessage || "");
       const synth = window.speechSynthesis;
       synth.cancel();
 
@@ -197,6 +215,77 @@ export default function TestRunnerPage() {
     [test?.language],
   );
 
+  const speakQuestion = useCallback(
+    async (targetQuestion: Question) => {
+      if (!test) return;
+      const token = getToken();
+      if (!token) {
+        speakWithBrowserTTS(targetQuestion);
+        return;
+      }
+
+      stopAudio();
+      setAudioError("");
+      setAudioLoading(true);
+      const requestId = ttsRequestIdRef.current;
+
+      try {
+        const audioBlob = await getQuestionTtsAudio(token, test.id, targetQuestion.id);
+        if (requestId !== ttsRequestIdRef.current) return;
+
+        if (!audioBlob.type.startsWith("audio/")) {
+          throw new Error("Некорректный формат аудио от сервера.");
+        }
+
+        const objectUrl = URL.createObjectURL(audioBlob);
+        audioObjectUrlRef.current = objectUrl;
+        const audio = new Audio(objectUrl);
+        audioElementRef.current = audio;
+
+        audio.onplay = () => setAudioPlaying(true);
+        audio.onended = () => {
+          setAudioLoading(false);
+          setAudioPlaying(false);
+          if (audioObjectUrlRef.current) {
+            URL.revokeObjectURL(audioObjectUrlRef.current);
+            audioObjectUrlRef.current = null;
+          }
+          audioElementRef.current = null;
+        };
+        audio.onerror = () => {
+          setAudioLoading(false);
+          setAudioPlaying(false);
+          if (audioObjectUrlRef.current) {
+            URL.revokeObjectURL(audioObjectUrlRef.current);
+            audioObjectUrlRef.current = null;
+          }
+          audioElementRef.current = null;
+          speakWithBrowserTTS(targetQuestion, "Серверный TTS недоступен, включен голос браузера.");
+        };
+
+        await audio.play();
+        if (requestId !== ttsRequestIdRef.current) return;
+        setAudioLoading(false);
+      } catch (err) {
+        if (requestId !== ttsRequestIdRef.current) return;
+        setAudioLoading(false);
+        if (err instanceof DOMException && err.name === "NotAllowedError") {
+          setAudioError("Автовоспроизведение заблокировано браузером. Нажмите «Озвучить вопрос».");
+          return;
+        }
+        const reason = err instanceof Error ? err.message : "";
+        const fallbackText = reason
+          ? `Серверный TTS недоступен (${reason}). Включен голос браузера.`
+          : "Серверный TTS недоступен, включен голос браузера.";
+        speakWithBrowserTTS(targetQuestion, fallbackText);
+        if (err instanceof Error) {
+          console.warn("Server TTS failed:", err.message);
+        }
+      }
+    },
+    [speakWithBrowserTTS, stopAudio, test],
+  );
+
   useEffect(() => {
     return () => {
       stopAudio();
@@ -210,7 +299,7 @@ export default function TestRunnerPage() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.getVoices();
     }
-    speakQuestion(question);
+    void speakQuestion(question);
     return () => stopAudio();
   }, [question?.id, speakQuestion, stopAudio, test?.mode]);
 
@@ -377,14 +466,14 @@ export default function TestRunnerPage() {
 
         <Card title="Вопрос">
           <div className={styles.questionWrap}>
-            <h3 className={styles.questionTitle}>{question.prompt}</h3>
+            <h3 className={styles.questionTitle}>{sanitizeQuestionPrompt(question.prompt)}</h3>
 
             {test.mode === "audio" && (
               <div className={styles.audioControls}>
-                <Button variant="secondary" onClick={() => speakQuestion(question)}>
-                  <Volume2 size={16} /> {audioPlaying ? "Повторить озвучку" : "Озвучить вопрос"}
+                <Button variant="secondary" disabled={audioLoading} onClick={() => void speakQuestion(question)}>
+                  <Volume2 size={16} /> {audioLoading ? "Готовим аудио..." : audioPlaying ? "Повторить озвучку" : "Озвучить вопрос"}
                 </Button>
-                <Button variant="ghost" disabled={!audioPlaying} onClick={stopAudio}>
+                <Button variant="ghost" disabled={!audioPlaying && !audioLoading} onClick={stopAudio}>
                   <VolumeX size={16} /> Стоп
                 </Button>
               </div>
@@ -592,7 +681,7 @@ function pickBestVoice(voices: SpeechSynthesisVoice[], lang: string): SpeechSynt
 
 function buildAudioNarration(question: Question, language: "RU" | "KZ"): string {
   const parts: string[] = [];
-  const basePrompt = (question.tts_text || question.prompt || "").trim();
+  const basePrompt = sanitizeQuestionPrompt((question.tts_text || question.prompt || "").trim());
   if (basePrompt) {
     parts.push(basePrompt);
   }
@@ -624,4 +713,8 @@ function buildAudioNarration(question: Question, language: "RU" | "KZ"): string 
   }
 
   return parts.join(" ");
+}
+
+function sanitizeQuestionPrompt(prompt: string): string {
+  return prompt.replace(/\s*\((вариант|нұсқа)\s*\d+\)\s*$/i, "").trim();
 }

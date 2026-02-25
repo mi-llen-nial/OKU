@@ -103,6 +103,29 @@ export function getTest(token: string, testId: number) {
   return apiRequest<Test>(`/tests/${testId}`, {}, token);
 }
 
+export async function getQuestionTtsAudio(token: string, testId: number, questionId: number) {
+  const response = await fetch(`${API_URL}/tests/${testId}/questions/${questionId}/tts`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let detail = `Request failed: ${response.status}`;
+    try {
+      const payload = await response.json();
+      detail = payload.detail || detail;
+    } catch {
+      // ignore parse error and keep default message
+    }
+    throw new Error(detail);
+  }
+
+  return response.blob();
+}
+
 export function submitTest(
   token: string,
   testId: number,
