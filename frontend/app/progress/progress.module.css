@@ -47,13 +47,19 @@
 }
 
 .subjectItem {
-  border: 1px solid var(--line-color);
+  border: none;
   border-radius: var(--radius-md);
-  background: #f5f5fb;
+  background: #ffffff;
   padding: 12px;
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  box-shadow: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.subjectItem:hover {
+  box-shadow: var(--shadow-soft);
 }
 
 .subjectName {

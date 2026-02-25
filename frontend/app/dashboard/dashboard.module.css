@@ -44,10 +44,16 @@
 .recentItem {
   display: grid;
   gap: 10px;
-  border: 1px solid var(--line-color);
+  border: none;
   border-radius: var(--radius-md);
-  background: #f5f5fb;
+  background: #ffffff;
   padding: 14px;
+  box-shadow: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.recentItem:hover {
+  box-shadow: var(--shadow-soft);
 }
 
 .recentItemHead {
@@ -81,12 +87,18 @@
 }
 
 .recommendCard {
-  border: 1px solid var(--line-color);
+  border: none;
   border-radius: var(--radius-md);
-  background: #f5f5fb;
+  background: #ffffff;
   padding: 14px;
   display: grid;
   gap: 10px;
+  box-shadow: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.recommendCard:hover {
+  box-shadow: var(--shadow-soft);
 }
 
 .recommendBadge {

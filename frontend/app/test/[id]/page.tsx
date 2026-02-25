@@ -1,8 +1,8 @@
 "use client";
 
-import { Volume2 } from "lucide-react";
+import { Volume2, VolumeX } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
@@ -30,6 +30,9 @@ export default function TestRunnerPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioError, setAudioError] = useState("");
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     const token = getToken();
@@ -65,13 +68,70 @@ export default function TestRunnerPage() {
     updateAnswer(questionId, { matches: { ...existing, [left]: right } });
   };
 
-  const speak = (text: string) => {
+  const stopAudio = useCallback(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = test?.language === "KZ" ? "kk-KZ" : "ru-RU";
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-  };
+    utteranceRef.current = null;
+    setAudioPlaying(false);
+  }, []);
+
+  const speakQuestion = useCallback(
+    (targetQuestion: Question) => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+        setAudioError("На этом устройстве озвучка недоступна.");
+        return;
+      }
+
+      const text = buildAudioNarration(targetQuestion, test?.language || "RU");
+      if (!text) return;
+
+      setAudioError("");
+      const synth = window.speechSynthesis;
+      synth.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = test?.language === "KZ" ? "kk-KZ" : "ru-RU";
+      utterance.rate = 0.96;
+      utterance.pitch = 1;
+
+      const voice = pickBestVoice(synth.getVoices(), utterance.lang);
+      if (voice) {
+        utterance.voice = voice;
+      }
+
+      utterance.onstart = () => setAudioPlaying(true);
+      utterance.onend = () => {
+        setAudioPlaying(false);
+        utteranceRef.current = null;
+      };
+      utterance.onerror = () => {
+        setAudioPlaying(false);
+        utteranceRef.current = null;
+        setAudioError("Не удалось воспроизвести вопрос. Попробуйте снова.");
+      };
+
+      utteranceRef.current = utterance;
+      synth.speak(utterance);
+    },
+    [test?.language],
+  );
+
+  useEffect(() => {
+    return () => {
+      stopAudio();
+    };
+  }, [stopAudio]);
+
+  useEffect(() => {
+    if (!question || test?.mode !== "audio") return;
+
+    // Подгружаем список голосов заранее, чтобы для RU/KZ находился наиболее подходящий.
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.getVoices();
+    }
+    speakQuestion(question);
+    return () => stopAudio();
+  }, [question?.id, speakQuestion, stopAudio, test?.mode]);
 
   const submit = async () => {
     if (!test) return;
@@ -86,6 +146,7 @@ export default function TestRunnerPage() {
     };
 
     try {
+      stopAudio();
       setSubmitting(true);
       await submitTest(token, test.id, body);
       router.push(`/results/${test.id}`);
@@ -140,11 +201,17 @@ export default function TestRunnerPage() {
           <div className={styles.questionWrap}>
             <h3 className={styles.questionTitle}>{question.prompt}</h3>
 
-            {test.mode === "audio" && question.tts_text && (
-              <Button variant="secondary" onClick={() => speak(question.tts_text || question.prompt)}>
-                <Volume2 size={16} /> Озвучить вопрос
-              </Button>
+            {test.mode === "audio" && (
+              <div className={styles.audioControls}>
+                <Button variant="secondary" onClick={() => speakQuestion(question)}>
+                  <Volume2 size={16} /> {audioPlaying ? "Повторить озвучку" : "Озвучить вопрос"}
+                </Button>
+                <Button variant="ghost" disabled={!audioPlaying} onClick={stopAudio}>
+                  <VolumeX size={16} /> Стоп
+                </Button>
+              </div>
             )}
+            {test.mode === "audio" && audioError && <div className={styles.audioError}>{audioError}</div>}
 
             {question.type === "single_choice" && renderSingleChoice(question, answerForCurrent, updateAnswer)}
             {question.type === "multi_choice" && renderMultiChoice(question, answerForCurrent, toggleMulti)}
@@ -159,13 +226,23 @@ export default function TestRunnerPage() {
             <Button
               variant="ghost"
               disabled={currentIndex === 0}
-              onClick={() => setCurrentIndex((idx) => Math.max(0, idx - 1))}
+              onClick={() => {
+                stopAudio();
+                setCurrentIndex((idx) => Math.max(0, idx - 1));
+              }}
             >
               Назад
             </Button>
 
             {currentIndex < total - 1 ? (
-              <Button onClick={() => setCurrentIndex((idx) => Math.min(total - 1, idx + 1))}>Далее</Button>
+              <Button
+                onClick={() => {
+                  stopAudio();
+                  setCurrentIndex((idx) => Math.min(total - 1, idx + 1));
+                }}
+              >
+                Далее
+              </Button>
             ) : (
               <Button disabled={submitting} onClick={submit}>
                 {submitting ? "Проверяем ответы..." : "Завершить тест"}
@@ -298,4 +375,51 @@ function extractOptionLabel(text: string, optionId: number): string {
 
 function stripOptionPrefix(text: string): string {
   return text.replace(/^\s*[A-Z]\s*[\).:-]\s*/i, "").trim();
+}
+
+function pickBestVoice(voices: SpeechSynthesisVoice[], lang: string): SpeechSynthesisVoice | null {
+  if (!voices.length) return null;
+  const normalized = lang.toLowerCase();
+
+  const exact = voices.find((voice) => voice.lang.toLowerCase() === normalized);
+  if (exact) return exact;
+
+  const byBaseLang = voices.find((voice) => voice.lang.toLowerCase().startsWith(normalized.slice(0, 2)));
+  return byBaseLang || voices[0] || null;
+}
+
+function buildAudioNarration(question: Question, language: "RU" | "KZ"): string {
+  const parts: string[] = [];
+  const basePrompt = (question.tts_text || question.prompt || "").trim();
+  if (basePrompt) {
+    parts.push(basePrompt);
+  }
+
+  const options = question.options_json?.options || [];
+  if (options.length > 0) {
+    parts.push(language === "KZ" ? "Жауап нұсқалары:" : "Варианты ответа:");
+    for (const option of options) {
+      const label = extractOptionLabel(option.text, option.id);
+      const text = stripOptionPrefix(option.text);
+      parts.push(`${label}. ${text}.`);
+    }
+  }
+
+  const left = question.options_json?.left || [];
+  const right = question.options_json?.right || [];
+  if (left.length && right.length) {
+    if (language === "KZ") {
+      parts.push("Сол жақтағы элементтер:");
+      parts.push(left.join(". "));
+      parts.push("Оң жақтағы элементтер:");
+      parts.push(right.join(". "));
+    } else {
+      parts.push("Элементы слева:");
+      parts.push(left.join(". "));
+      parts.push("Элементы справа:");
+      parts.push(right.join(". "));
+    }
+  }
+
+  return parts.join(" ");
 }

@@ -216,7 +216,7 @@ export default function TestSetupPage() {
     getSubjects(token)
       .then((data) => {
         setSubjects(data);
-        setSubjectId(data.length > 0 ? data[0].id : null);
+        setSubjectId(null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить предметы"));
   }, []);
@@ -229,6 +229,7 @@ export default function TestSetupPage() {
       if (event.key === "Escape" && !loading) {
         setIsSettingsModalOpen(false);
         setError("");
+        setSubjectId(null);
       }
     };
 
@@ -291,8 +292,12 @@ export default function TestSetupPage() {
 
   const closeSettingsModal = () => {
     if (loading) return;
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setIsSettingsModalOpen(false);
     setError("");
+    setSubjectId(null);
   };
 
   const createTest = async () => {

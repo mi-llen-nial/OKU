@@ -4,10 +4,16 @@
 }
 
 .item {
-  border: 1px solid var(--line-color);
+  border: none;
   border-radius: var(--radius-md);
   background: #fff;
   overflow: hidden;
+  box-shadow: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.item:hover {
+  box-shadow: var(--shadow-soft);
 }
 
 .summary {
@@ -20,7 +26,7 @@
   padding: 12px 14px;
   font-weight: 600;
   color: var(--ink-strong);
-  background: #f8fafe;
+  background: #ffffff;
 }
 
 .summary::-webkit-details-marker {
@@ -28,7 +34,6 @@
 }
 
 .body {
-  border-top: 1px solid var(--line-color);
   padding: 12px 14px;
   color: var(--ink-muted);
   display: grid;

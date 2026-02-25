@@ -21,7 +21,7 @@
   --radius-lg: 16px;
   --radius-pill: 999px;
 
-  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 24px rgba(15, 23, 42, 0.06);
+  --shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.08);
   --shadow-glow: 0 6px 18px rgba(106, 99, 245, 0.28);
 }
 
@@ -41,7 +41,7 @@ body {
   letter-spacing: 0.007em;
   font-weight: 350;
   color: var(--ink-strong);
-  background: #f4f5fd;
+  background: #ffffff;
 }
 
 h1,
@@ -161,24 +161,24 @@ img {
 }
 
 .selectCard {
-  border: 1px solid var(--line-color);
+  border: none;
   border-radius: var(--radius-md);
   padding: 11px;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, background 0.15s ease;
   background: #fff;
+  box-shadow: none;
   text-align: left;
 }
 
 .selectCard:hover {
   transform: translateY(-1px);
-  border-color: #cfd7e6;
+  box-shadow: var(--shadow-soft);
 }
 
 .selectCardActive {
-  border-color: var(--brand-primary);
-  background: linear-gradient(180deg, #ffffff, #f4f3ff);
-  box-shadow: inset 0 0 0 1px rgba(106, 99, 245, 0.14);
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
 }
 
 .selectCardTitle {
@@ -216,7 +216,7 @@ img {
 .table th {
   color: var(--ink-muted);
   font-weight: 700;
-  background: #f5f5fb;
+  background: #ffffff;
 }
 
 .authPage {
@@ -229,10 +229,15 @@ img {
 .authCard {
   width: min(460px, 100%);
   background: #fff;
-  border: 1px solid var(--line-color);
+  border: none;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-soft);
+  box-shadow: none;
   padding: 22px;
+  transition: box-shadow 0.15s ease;
+}
+
+.authCard:hover {
+  box-shadow: var(--shadow-soft);
 }
 
 .authHeader {

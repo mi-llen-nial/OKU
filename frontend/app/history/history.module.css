@@ -47,12 +47,18 @@
 }
 
 .attempt {
-  border: 1px solid var(--line-color);
+  border: none;
   border-radius: var(--radius-md);
   padding: 14px;
   display: grid;
   gap: 10px;
-  background: #f5f5fb;
+  background: #ffffff;
+  box-shadow: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.attempt:hover {
+  box-shadow: var(--shadow-soft);
 }
 
 .head {

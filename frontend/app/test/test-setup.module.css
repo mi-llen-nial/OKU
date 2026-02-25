@@ -76,7 +76,7 @@
 }
 
 .subjectCard {
-  border: 1px solid transparent;
+  border: none;
   border-radius: 16px;
   background: #ffffff;
   padding: 14px 16px;
@@ -85,18 +85,16 @@
   gap: 14px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease;
+  transition: box-shadow 0.14s ease;
+  box-shadow: none;
 }
 
 .subjectCard:hover {
-  border-color: var(--brand-primary);
-  box-shadow: 0 0 0 1px rgba(106, 99, 245, 0.16);
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
 }
 
 .subjectCardActive {
-  border-color: var(--brand-primary);
-  box-shadow: 0 0 0 1px rgba(106, 99, 245, 0.16);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
 }
 
 .subjectCardDisabled {
@@ -105,9 +103,7 @@
 }
 
 .subjectCardDisabled:hover {
-  border-color: transparent;
   box-shadow: none;
-  transform: none;
 }
 
 .subjectIcon {

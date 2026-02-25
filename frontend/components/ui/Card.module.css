@@ -1,9 +1,14 @@
 .card {
   background: #fff;
-  border: 1px solid var(--line-color);
+  border: none;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-soft);
+  box-shadow: none;
   padding: 22px;
+  transition: box-shadow 0.15s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-soft);
 }
 
 .title {
