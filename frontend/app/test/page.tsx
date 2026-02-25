@@ -174,6 +174,7 @@ const DIFFICULTIES: Array<{ value: Difficulty; title: string }> = [
 ];
 
 const QUESTION_COUNTS = [5, 10, 15, 20, 25] as const;
+const TIME_LIMIT_OPTIONS = [5, 10, 20, 30, 60] as const;
 
 const ICON_BY_SUBJECT: Record<SubjectIconKey, string> = {
   math: assetPaths.icons.math,
@@ -205,6 +206,7 @@ export default function TestSetupPage() {
   const [language, setLanguage] = useState<Language>("RU");
   const [mode, setMode] = useState<Mode>("text");
   const [numQuestions, setNumQuestions] = useState(10);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState<(typeof TIME_LIMIT_OPTIONS)[number]>(20);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -319,6 +321,7 @@ export default function TestSetupPage() {
         language,
         mode,
         num_questions: numQuestions,
+        time_limit_minutes: timeLimitMinutes,
       });
 
       router.push(`/test/${test.id}`);
@@ -475,6 +478,22 @@ export default function TestSetupPage() {
                       onClick={() => setNumQuestions(value)}
                     >
                       {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={styles.modalBlock}>
+                <span className={styles.settingLabel}>Лимит времени</span>
+                <div className={styles.choiceRow}>
+                  {TIME_LIMIT_OPTIONS.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`${styles.choiceButton} ${timeLimitMinutes === value ? styles.choiceButtonActive : ""}`}
+                      onClick={() => setTimeLimitMinutes(value)}
+                    >
+                      {value < 60 ? `${value} мин` : "1 час"}
                     </button>
                   ))}
                 </div>

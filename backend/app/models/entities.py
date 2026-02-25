@@ -126,12 +126,28 @@ class Test(Base):
     student: Mapped[User] = relationship(back_populates="tests")
     subject: Mapped[Subject] = relationship(back_populates="tests")
     questions: Mapped[list[Question]] = relationship(back_populates="test", cascade="all, delete-orphan")
+    session: Mapped[TestSession | None] = relationship(back_populates="test", uselist=False, cascade="all, delete-orphan")
     result: Mapped[Result | None] = relationship(back_populates="test", uselist=False, cascade="all, delete-orphan")
     recommendation: Mapped[Recommendation | None] = relationship(
         back_populates="test",
         uselist=False,
         cascade="all, delete-orphan",
     )
+
+
+class TestSession(Base):
+    __tablename__ = "test_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    test_id: Mapped[int] = mapped_column(ForeignKey("tests.id", ondelete="CASCADE"), unique=True, index=True)
+    time_limit_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    elapsed_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    warning_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    warning_events_json: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    test: Mapped[Test] = relationship(back_populates="session")
 
 
 class Question(Base):

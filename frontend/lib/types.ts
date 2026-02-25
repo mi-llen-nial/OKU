@@ -55,8 +55,16 @@ export interface Test {
   difficulty: Difficulty;
   language: Language;
   mode: Mode;
+  time_limit_seconds?: number | null;
   created_at: string;
   questions: Question[];
+}
+
+export interface TestWarningSignal {
+  type: string;
+  at_seconds: number;
+  question_id?: number | null;
+  details?: Record<string, unknown>;
 }
 
 export interface QuestionFeedback {
@@ -83,7 +91,11 @@ export interface TestResult {
     total_score: number;
     max_score: number;
     percent: number;
+    elapsed_seconds: number;
+    time_limit_seconds?: number | null;
+    warning_count: number;
   };
+  integrity_warnings: TestWarningSignal[];
   feedback: QuestionFeedback[];
   recommendation: Recommendation;
 }
@@ -97,11 +109,13 @@ export interface HistoryItem {
   mode: Mode;
   created_at: string;
   percent: number;
+  warning_count: number;
   weak_topics: string[];
 }
 
 export interface StudentProgress {
   total_tests: number;
+  total_warnings: number;
   avg_percent: number;
   best_percent: number;
   weak_topics: string[];

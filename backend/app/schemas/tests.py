@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models import DifficultyLevel, PreferredLanguage, QuestionType, TestMode
 
@@ -12,6 +12,16 @@ class GenerateTestRequest(BaseModel):
     language: PreferredLanguage
     mode: TestMode
     num_questions: int = Field(default=10, ge=3, le=30)
+    time_limit_minutes: int | None = Field(default=None, ge=5, le=60)
+
+    @field_validator("time_limit_minutes")
+    @classmethod
+    def validate_time_limit_minutes(cls, value: int | None) -> int | None:
+        if value is None:
+            return value
+        if value not in {5, 10, 20, 30, 60}:
+            raise ValueError("time_limit_minutes must be one of: 5, 10, 20, 30, 60")
+        return value
 
 
 class GenerateMistakesTestRequest(BaseModel):
@@ -52,6 +62,7 @@ class TestResponse(BaseModel):
     difficulty: DifficultyLevel
     language: PreferredLanguage
     mode: TestMode
+    time_limit_seconds: int | None = None
     created_at: datetime
     questions: list[QuestionResponse]
 
@@ -63,8 +74,21 @@ class SubmitAnswerItem(BaseModel):
     student_answer_json: dict[str, Any]
 
 
+class TestWarningSignal(BaseModel):
+    type: str
+    at_seconds: int = Field(default=0, ge=0)
+    question_id: int | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class TestTelemetryPayload(BaseModel):
+    elapsed_seconds: int | None = Field(default=None, ge=0)
+    warnings: list[TestWarningSignal] = Field(default_factory=list)
+
+
 class SubmitTestRequest(BaseModel):
     answers: list[SubmitAnswerItem]
+    telemetry: TestTelemetryPayload | None = None
 
 
 class QuestionFeedback(BaseModel):
@@ -82,6 +106,9 @@ class ResultResponse(BaseModel):
     total_score: float
     max_score: float
     percent: float
+    elapsed_seconds: int = 0
+    time_limit_seconds: int | None = None
+    warning_count: int = 0
 
 
 class RecommendationResponse(BaseModel):
@@ -93,6 +120,7 @@ class RecommendationResponse(BaseModel):
 class SubmitTestResponse(BaseModel):
     test_id: int
     result: ResultResponse
+    integrity_warnings: list[TestWarningSignal] = Field(default_factory=list)
     feedback: list[QuestionFeedback]
     recommendation: RecommendationResponse
 
@@ -101,6 +129,7 @@ class TestResultDetailsResponse(BaseModel):
     test_id: int
     submitted_at: datetime
     result: ResultResponse
+    integrity_warnings: list[TestWarningSignal] = Field(default_factory=list)
     feedback: list[QuestionFeedback]
     recommendation: RecommendationResponse
 
@@ -114,6 +143,7 @@ class HistoryItemResponse(BaseModel):
     mode: TestMode
     created_at: datetime
     percent: float
+    warning_count: int = 0
     weak_topics: list[str]
 
 
@@ -131,6 +161,7 @@ class SubjectStat(BaseModel):
 
 class StudentProgressResponse(BaseModel):
     total_tests: int
+    total_warnings: int = 0
     avg_percent: float
     best_percent: float
     weak_topics: list[str]

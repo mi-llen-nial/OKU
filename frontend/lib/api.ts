@@ -75,6 +75,7 @@ export function generateTest(
     language: "RU" | "KZ";
     mode: "text" | "audio" | "oral";
     num_questions: number;
+    time_limit_minutes?: 5 | 10 | 20 | 30 | 60;
   },
 ) {
   return apiRequest<Test>("/tests/generate", {
@@ -107,6 +108,15 @@ export function submitTest(
   testId: number,
   body: {
     answers: Array<{ question_id: number; student_answer_json: Record<string, unknown> }>;
+    telemetry?: {
+      elapsed_seconds?: number;
+      warnings?: Array<{
+        type: string;
+        at_seconds: number;
+        question_id?: number | null;
+        details?: Record<string, unknown>;
+      }>;
+    };
   },
 ) {
   return apiRequest<TestResult>(`/tests/${testId}/submit`, {

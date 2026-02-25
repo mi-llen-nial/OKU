@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookCheck, Gauge, Target } from "lucide-react";
+import { AlertTriangle, BookCheck, Gauge, Target } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import AppShell from "@/components/AppShell";
@@ -58,6 +58,7 @@ export default function HistoryPage() {
               <StatWidget label="Тестов" value={`${progress?.total_tests ?? 0}`} icon={<BookCheck size={16} />} />
               <StatWidget label="Средний" value={`${progress?.avg_percent ?? 0}%`} icon={<Gauge size={16} />} />
               <StatWidget label="Лучший" value={`${progress?.best_percent ?? 0}%`} icon={<Target size={16} />} />
+              <StatWidget label="Предупреждений" value={`${progress?.total_warnings ?? 0}`} icon={<AlertTriangle size={16} />} />
             </section>
           </section>
 
@@ -99,6 +100,7 @@ export default function HistoryPage() {
                       </div>
                       <div className="inline">
                         <Badge variant="info">{item.percent}%</Badge>
+                        <Badge variant="normal">Warnings: {item.warning_count}</Badge>
                         <Badge>{item.mode}</Badge>
                         <Badge>{item.difficulty}</Badge>
                       </div>

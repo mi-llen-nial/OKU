@@ -120,7 +120,7 @@ export default function DashboardPage() {
     <AuthGuard roles={["student"]}>
       <AppShell>
         <div className={styles.page}>
-          <section className={styles.section}>
+          <section className={`${styles.section} ${styles.primarySection}`}>
             <div className={styles.sectionHeaderCentered}>
               <h2 className={styles.sectionTitle}>Главная</h2>
               <p className={styles.sectionSubtitle}>Краткий пересказ вашего текущего прогресса</p>

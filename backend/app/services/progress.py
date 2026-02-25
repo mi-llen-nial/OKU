@@ -6,23 +6,24 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Group, GroupMembership, Recommendation, Result, Subject, Test, User
+from app.models import Group, GroupMembership, Recommendation, Result, Subject, Test, TestSession, User
 from app.schemas.teacher import GroupAnalyticsResponse, GroupStudentMetric, GroupTrendPoint, GroupWeakTopicsResponse, WeakTopicItem
 from app.schemas.tests import HistoryItemResponse, ProgressPoint, StudentProgressResponse, SubjectStat
 
 
 def build_student_history(db: Session, student_id: int) -> list[HistoryItemResponse]:
     rows = db.execute(
-        select(Test, Subject, Result, Recommendation)
+        select(Test, Subject, Result, Recommendation, TestSession)
         .join(Subject, Subject.id == Test.subject_id)
         .join(Result, Result.test_id == Test.id)
         .outerjoin(Recommendation, Recommendation.test_id == Test.id)
+        .outerjoin(TestSession, TestSession.test_id == Test.id)
         .where(Test.student_id == student_id)
         .order_by(Test.created_at.desc())
     ).all()
 
     history: list[HistoryItemResponse] = []
-    for test, subject, result, recommendation in rows:
+    for test, subject, result, recommendation, session in rows:
         subject_name = subject.name_ru if test.language.value == "RU" else subject.name_kz
         history.append(
             HistoryItemResponse(
@@ -34,6 +35,7 @@ def build_student_history(db: Session, student_id: int) -> list[HistoryItemRespo
                 mode=test.mode,
                 created_at=test.created_at,
                 percent=round(result.percent, 2),
+                warning_count=int(session.warning_count if session else 0),
                 weak_topics=list(recommendation.weak_topics_json if recommendation else []),
             )
         )
@@ -42,9 +44,10 @@ def build_student_history(db: Session, student_id: int) -> list[HistoryItemRespo
 
 def build_student_progress(db: Session, student_id: int) -> StudentProgressResponse:
     rows = db.execute(
-        select(Test, Subject, Result)
+        select(Test, Subject, Result, TestSession)
         .join(Subject, Subject.id == Test.subject_id)
         .join(Result, Result.test_id == Test.id)
+        .outerjoin(TestSession, TestSession.test_id == Test.id)
         .where(Test.student_id == student_id)
         .order_by(Test.created_at.asc())
     ).all()
@@ -52,6 +55,7 @@ def build_student_progress(db: Session, student_id: int) -> StudentProgressRespo
     if not rows:
         return StudentProgressResponse(
             total_tests=0,
+            total_warnings=0,
             avg_percent=0.0,
             best_percent=0.0,
             weak_topics=["Недостаточно данных"],
@@ -60,12 +64,14 @@ def build_student_progress(db: Session, student_id: int) -> StudentProgressRespo
         )
 
     percents: list[float] = []
+    total_warnings = 0
     trend: list[ProgressPoint] = []
     subject_buckets: defaultdict[int, list[float]] = defaultdict(list)
     subject_names: dict[int, str] = {}
 
-    for test, subject, result in rows:
+    for test, subject, result, session in rows:
         percents.append(result.percent)
+        total_warnings += int(session.warning_count if session else 0)
         trend.append(ProgressPoint(date=test.created_at.date().isoformat(), percent=round(result.percent, 2)))
         subject_buckets[subject.id].append(result.percent)
         subject_names[subject.id] = subject.name_ru if test.language.value == "RU" else subject.name_kz
@@ -95,6 +101,7 @@ def build_student_progress(db: Session, student_id: int) -> StudentProgressRespo
 
     return StudentProgressResponse(
         total_tests=len(percents),
+        total_warnings=total_warnings,
         avg_percent=round(sum(percents) / len(percents), 2),
         best_percent=round(max(percents), 2),
         weak_topics=weak_topics,

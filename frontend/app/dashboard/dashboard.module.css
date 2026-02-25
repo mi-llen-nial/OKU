@@ -3,7 +3,7 @@
   max-width: 1120px;
   margin: 0 auto;
   display: grid;
-  gap: 104px;
+  gap: 80px;
   padding-bottom: 56px;
 }
 
@@ -16,6 +16,10 @@
 .section {
   display: grid;
   gap: 28px;
+}
+
+.primarySection {
+  gap: 32px;
 }
 
 .sectionHeaderCentered {
@@ -45,6 +49,9 @@
   display: grid;
   gap: 36px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 24px 40px;
+  border-radius: 18px;
+  background: linear-gradient(106deg, #6a63f5 0%, #6a63f5 100%);
 }
 
 .statItem {
@@ -54,7 +61,7 @@
 
 .statLabel {
   margin: 0;
-  color: var(--ink-strong);
+  color: #ffffff;
   font-size: 16px;
   line-height: 1.35;
   font-weight: 600;
@@ -62,15 +69,15 @@
 
 .statMeta {
   margin: 0;
-  color: var(--ink-muted);
+  color: #b5b2e5;
   font-size: 16px;
   line-height: 1.35;
   font-weight: 350;
 }
 
 .statValue {
-  margin: 4px 0 0;
-  color: var(--brand-primary);
+  margin: 0;
+  color: #ffffff;
   font-size: 36px;
   line-height: 1.1;
   font-weight: 600;
@@ -240,6 +247,14 @@
   .statsRow,
   .cardGrid {
     grid-template-columns: 1fr;
+  }
+
+  .statsRow {
+    gap: 16px;
+    padding: 20px 18px;
+  }
+
+  .cardGrid {
     gap: 16px;
   }
 

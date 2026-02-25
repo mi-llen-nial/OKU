@@ -97,6 +97,13 @@ export default function ResultPage() {
             <p className="muted">
               Баллы: <b>{data.result.total_score}</b> / {data.result.max_score}
             </p>
+            <p className="muted">
+              Время: <b>{formatDuration(data.result.elapsed_seconds)}</b>
+              {typeof data.result.time_limit_seconds === "number" ? ` / лимит ${formatDuration(data.result.time_limit_seconds)}` : ""}
+            </p>
+            <p className="muted">
+              Предупреждений: <b>{data.result.warning_count}</b>
+            </p>
             <div className={styles.badgeList}>
               {data.recommendation.weak_topics.map((topic) => (
                 <Badge key={topic}>{topic}</Badge>
@@ -115,6 +122,24 @@ export default function ResultPage() {
 
         <Card title="Ошибки и объяснения" subtitle="Откройте вопрос, чтобы увидеть детали.">
           <Accordion items={accordionItems} />
+        </Card>
+
+        <Card title="Integrity Warnings" subtitle="События, зафиксированные во время прохождения теста.">
+          {data.integrity_warnings.length === 0 ? (
+            <p className="muted">Предупреждений не зафиксировано.</p>
+          ) : (
+            <div className={styles.taskGrid}>
+              {data.integrity_warnings.map((item, index) => (
+                <article className={styles.taskItem} key={`${item.type}-${item.at_seconds}-${index}`}>
+                  <div className="inline">
+                    <Badge variant="danger">{item.type}</Badge>
+                    <Badge>t={formatDuration(item.at_seconds)}</Badge>
+                    {item.question_id ? <Badge>Q{item.question_id}</Badge> : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card title="Дополнительные задания">
@@ -141,4 +166,13 @@ export default function ResultPage() {
       </AppShell>
     </AuthGuard>
   );
+}
+
+function formatDuration(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds || 0));
+  const minutes = Math.floor(safe / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (safe % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }

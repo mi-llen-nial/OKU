@@ -1,19 +1,35 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.core.deps import CurrentUser, DBSession, require_role
-from app.models import Answer, PreferredLanguage, Question, QuestionType, Recommendation, Result, Subject, Test, TestMode, User, UserRole
+from app.models import (
+    Answer,
+    DifficultyLevel,
+    PreferredLanguage,
+    Question,
+    QuestionType,
+    Recommendation,
+    Result,
+    Subject,
+    Test,
+    TestMode,
+    TestSession,
+    User,
+    UserRole,
+)
 from app.schemas.tests import (
     GenerateMistakesTestRequest,
     GenerateTestRequest,
     QuestionResponse,
     RecommendationResponse,
     ResultResponse,
+    TestWarningSignal,
     SubmitTestRequest,
     SubmitTestResponse,
     TestResponse,
@@ -40,6 +56,14 @@ def generate_test(
         student_id=current_user.id,
         subject_id=payload.subject_id,
     )
+    used_library_question_ids = _collect_used_library_question_ids(
+        db=db,
+        student_id=current_user.id,
+        subject_id=payload.subject_id,
+        difficulty=payload.difficulty,
+        language=payload.language,
+        mode=payload.mode,
+    )
 
     generated = ai_service.generate_test(
         subject=subject,
@@ -49,6 +73,7 @@ def generate_test(
         num_questions=payload.num_questions,
         user_id=current_user.id,
         focus_topics=focus_topics,
+        used_library_question_ids=used_library_question_ids,
     )
 
     test = Test(
@@ -60,6 +85,12 @@ def generate_test(
     )
     db.add(test)
     db.flush()
+    db.add(
+        TestSession(
+            test_id=test.id,
+            time_limit_seconds=(payload.time_limit_minutes * 60) if payload.time_limit_minutes else None,
+        )
+    )
 
     for generated_question in generated.questions:
         test.questions.append(
@@ -123,6 +154,7 @@ def generate_test_from_mistakes(
     )
     db.add(test)
     db.flush()
+    db.add(TestSession(test_id=test.id, time_limit_seconds=None))
 
     for source_question, source_test in selected_pairs:
         normalized_type = source_question.type
@@ -180,6 +212,36 @@ def submit_test(
     answers_by_question_id = {item.question_id: item.student_answer_json for item in payload.answers}
     evaluation = evaluate_answers(test.questions, answers_by_question_id)
 
+    now = datetime.now(timezone.utc)
+    telemetry = payload.telemetry
+    if telemetry and telemetry.elapsed_seconds is not None:
+        elapsed_seconds = int(max(0, telemetry.elapsed_seconds))
+    else:
+        elapsed_seconds = int(max(0, (now - test.created_at).total_seconds()))
+
+    session = test.session or TestSession(test_id=test.id, started_at=test.created_at)
+    if not test.session:
+        db.add(session)
+
+    normalized_warnings = _normalize_warning_events(list(telemetry.warnings if telemetry else []))
+    if session.time_limit_seconds is not None and elapsed_seconds > session.time_limit_seconds:
+        normalized_warnings.append(
+            {
+                "type": "time_limit_exceeded",
+                "at_seconds": elapsed_seconds,
+                "question_id": None,
+                "details": {
+                    "limit_seconds": int(session.time_limit_seconds),
+                    "elapsed_seconds": elapsed_seconds,
+                },
+            }
+        )
+    merged_warning_events = _merge_warning_events(session.warning_events_json or [], normalized_warnings)
+    session.warning_events_json = merged_warning_events
+    session.warning_count = len(merged_warning_events)
+    session.elapsed_seconds = max(int(session.elapsed_seconds or 0), elapsed_seconds)
+    session.submitted_at = now
+
     feedback_map = {item.question_id: item for item in evaluation.feedback}
     for question in test.questions:
         student_answer = answers_by_question_id.get(question.id, {})
@@ -219,11 +281,8 @@ def submit_test(
 
     return SubmitTestResponse(
         test_id=test.id,
-        result=ResultResponse(
-            total_score=evaluation.total_score,
-            max_score=evaluation.max_score,
-            percent=percent,
-        ),
+        result=_build_result_response(result=result, session=session),
+        integrity_warnings=[TestWarningSignal.model_validate(item) for item in merged_warning_events],
         feedback=evaluation.feedback,
         recommendation=RecommendationResponse(
             weak_topics=evaluation.weak_topics,
@@ -248,14 +307,13 @@ def get_test_result(test_id: int, db: DBSession, current_user: CurrentUser) -> T
 
     evaluation = evaluate_answers(test.questions, answers_map)
     recommendation = test.recommendation
+    session = test.session
+    warning_events = _normalize_warning_events_json(session.warning_events_json if session else [])
     return TestResultDetailsResponse(
         test_id=test.id,
         submitted_at=test.result.created_at,
-        result=ResultResponse(
-            total_score=test.result.total_score,
-            max_score=test.result.max_score,
-            percent=test.result.percent,
-        ),
+        result=_build_result_response(result=test.result, session=session),
+        integrity_warnings=warning_events,
         feedback=evaluation.feedback,
         recommendation=RecommendationResponse(
             weak_topics=list(recommendation.weak_topics_json if recommendation else evaluation.weak_topics),
@@ -328,6 +386,36 @@ def _collect_student_focus_topics(db: DBSession, student_id: int, subject_id: in
     return [topic for topic, _ in topic_counter.most_common(limit)]
 
 
+def _collect_used_library_question_ids(
+    *,
+    db: DBSession,
+    student_id: int,
+    subject_id: int,
+    difficulty: DifficultyLevel,
+    language: PreferredLanguage,
+    mode: TestMode,
+) -> set[str]:
+    explanation_rows = db.scalars(
+        select(Question.explanation_json)
+        .join(Test, Question.test_id == Test.id)
+        .join(Result, Result.test_id == Test.id)
+        .where(
+            Test.student_id == student_id,
+            Test.subject_id == subject_id,
+            Test.difficulty == difficulty,
+            Test.language == language,
+            Test.mode == mode,
+        )
+    ).all()
+
+    used_ids: set[str] = set()
+    for explanation in explanation_rows:
+        value = str((explanation or {}).get("library_question_id", "")).strip()
+        if value:
+            used_ids.add(value)
+    return used_ids
+
+
 def _load_wrong_questions(db: DBSession, student_id: int, subject_id: int | None = None) -> list[tuple[Question, Test]]:
     query = (
         db.query(Question, Test)
@@ -359,6 +447,7 @@ def _load_test(db: DBSession, test_id: int) -> Test:
         .options(
             joinedload(Test.questions).joinedload(Question.answers),
             joinedload(Test.subject),
+            joinedload(Test.session),
             joinedload(Test.result),
             joinedload(Test.recommendation),
         )
@@ -396,6 +485,80 @@ def _build_test_response(test: Test) -> TestResponse:
         difficulty=test.difficulty,
         language=test.language,
         mode=test.mode,
+        time_limit_seconds=(test.session.time_limit_seconds if test.session else None),
         created_at=test.created_at,
         questions=questions,
+    )
+
+
+def _normalize_warning_events(events: list[TestWarningSignal]) -> list[dict]:
+    normalized: list[dict] = []
+    for item in events:
+        event_type = str(item.type).strip().lower().replace(" ", "_")
+        if not event_type:
+            continue
+        normalized.append(
+            {
+                "type": event_type,
+                "at_seconds": int(max(0, item.at_seconds)),
+                "question_id": item.question_id,
+                "details": dict(item.details or {}),
+            }
+        )
+    return normalized
+
+
+def _merge_warning_events(existing: list[dict], incoming: list[dict], limit: int = 200) -> list[dict]:
+    merged: list[dict] = []
+    seen: set[tuple[str, int, int | None]] = set()
+
+    for source in [existing, incoming]:
+        for item in source:
+            event_type = str(item.get("type", "")).strip().lower()
+            if not event_type:
+                continue
+            try:
+                at_seconds = int(max(0, int(item.get("at_seconds", 0))))
+            except (TypeError, ValueError):
+                at_seconds = 0
+            question_raw = item.get("question_id")
+            try:
+                question_id = int(question_raw) if question_raw is not None else None
+            except (TypeError, ValueError):
+                question_id = None
+            signature = (event_type, at_seconds, question_id)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            merged.append(
+                {
+                    "type": event_type,
+                    "at_seconds": at_seconds,
+                    "question_id": question_id,
+                    "details": dict(item.get("details", {}) or {}),
+                }
+            )
+            if len(merged) >= limit:
+                return merged
+    return merged
+
+
+def _normalize_warning_events_json(events: list[dict] | None) -> list[TestWarningSignal]:
+    normalized: list[TestWarningSignal] = []
+    for item in events or []:
+        try:
+            normalized.append(TestWarningSignal.model_validate(item))
+        except Exception:
+            continue
+    return normalized
+
+
+def _build_result_response(result: Result, session: TestSession | None) -> ResultResponse:
+    return ResultResponse(
+        total_score=result.total_score,
+        max_score=result.max_score,
+        percent=result.percent,
+        elapsed_seconds=int(session.elapsed_seconds if session else 0),
+        time_limit_seconds=(session.time_limit_seconds if session else None),
+        warning_count=int(session.warning_count if session else 0),
     )

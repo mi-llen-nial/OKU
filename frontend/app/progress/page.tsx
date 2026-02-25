@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame, LineChart, Shield } from "lucide-react";
+import { AlertTriangle, Flame, LineChart, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import AppShell from "@/components/AppShell";
@@ -53,6 +53,7 @@ export default function ProgressPage() {
               <StatWidget label="Стабильность" value={`${progress?.avg_percent ?? 0}%`} icon={<Shield size={16} />} />
               <StatWidget label="Пик" value={`${progress?.best_percent ?? 0}%`} icon={<Flame size={16} />} />
               <StatWidget label="Всего попыток" value={`${progress?.total_tests ?? 0}`} icon={<LineChart size={16} />} />
+              <StatWidget label="Предупреждения" value={`${progress?.total_warnings ?? 0}`} icon={<AlertTriangle size={16} />} />
             </section>
           </section>
 
