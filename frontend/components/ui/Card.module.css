@@ -1,0 +1,32 @@
+.card {
+  background: #fff;
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 18px;
+}
+
+.title {
+  margin: 0;
+  font-weight: 700;
+  color: var(--ink-strong);
+  letter-spacing: 0.01em;
+  font-size: 1.04rem;
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.content {
+  margin-top: 14px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}

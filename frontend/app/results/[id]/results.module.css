@@ -1,0 +1,35 @@
+.scoreGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.scoreValue {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+.badgeList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.taskGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.taskItem {
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: #f8fafe;
+}
+
+@media (max-width: 960px) {
+  .scoreGrid {
+    grid-template-columns: 1fr;
+  }
+}

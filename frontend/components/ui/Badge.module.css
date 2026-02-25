@@ -1,0 +1,34 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.normal {
+  color: #334155;
+  background: #f1f5ff;
+  border-color: #d8e0f3;
+}
+
+.success {
+  color: #0f766e;
+  background: #e6fffa;
+  border-color: #9ce7dd;
+}
+
+.danger {
+  color: #9f1239;
+  background: #ffeaf0;
+  border-color: #f8bed0;
+}
+
+.info {
+  color: #2c3d93;
+  background: #e8eeff;
+  border-color: #bfcbff;
+}

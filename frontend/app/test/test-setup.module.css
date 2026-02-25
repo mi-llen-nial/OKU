@@ -1,0 +1,33 @@
+.layout {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.1fr 0.9fr;
+}
+
+.modeList {
+  display: grid;
+  gap: 8px;
+}
+
+.modeItem {
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: #f8faff;
+}
+
+.modeTitle {
+  font-weight: 700;
+}
+
+.modeText {
+  margin-top: 4px;
+  color: var(--ink-muted);
+  font-size: 0.86rem;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}

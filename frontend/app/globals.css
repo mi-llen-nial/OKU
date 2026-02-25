@@ -1,0 +1,269 @@
+:root {
+  --font-body: "Inter", "Segoe UI", "Roboto", sans-serif;
+
+  --brand-primary: #5d6bff;
+  --brand-secondary: #7a85ff;
+  --brand-accent: #aeb8ff;
+  --brand-paper: #f5f7fc;
+  --brand-ink: #111827;
+  --brand-mist: #eef2ff;
+  --brand-glow: #dbe2ff;
+
+  --ink-strong: #111827;
+  --ink-muted: #5d677b;
+
+  --line-color: #e5eaf2;
+  --panel-base: #ffffff;
+  --panel-elevated: #f9fbff;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 24px rgba(15, 23, 42, 0.06);
+  --shadow-glow: 0 6px 18px rgba(93, 107, 255, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--ink-strong);
+  background:
+    radial-gradient(circle at 100% 0, rgba(93, 107, 255, 0.1), transparent 35%),
+    radial-gradient(circle at 0 20%, rgba(122, 133, 255, 0.08), transparent 35%),
+    #f4f7fb;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+  margin-top: 0;
+  color: var(--ink-strong);
+}
+
+p {
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--ink-strong);
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(93, 107, 255, 0.16);
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+.pageLoading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: var(--ink-muted);
+}
+
+.muted {
+  color: var(--ink-muted);
+}
+
+.errorText {
+  color: #bf1f39;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.stack {
+  display: grid;
+  gap: 14px;
+}
+
+.grid2 {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid3 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.formGrid {
+  display: grid;
+  gap: 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  font-weight: 700;
+}
+
+.selectGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.selectCard {
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-md);
+  padding: 11px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  background: #fff;
+  text-align: left;
+}
+
+.selectCard:hover {
+  transform: translateY(-1px);
+  border-color: #cfd7e6;
+}
+
+.selectCardActive {
+  border-color: #95a2ff;
+  background: linear-gradient(180deg, #ffffff, #f4f7ff);
+  box-shadow: inset 0 0 0 1px rgba(93, 107, 255, 0.14);
+}
+
+.selectCardTitle {
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+
+.selectCardDescription {
+  margin-top: 4px;
+  color: var(--ink-muted);
+  font-size: 0.84rem;
+}
+
+.tableWrap {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  font-size: 0.88rem;
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--line-color);
+}
+
+.table th {
+  color: var(--ink-muted);
+  font-weight: 700;
+  background: #f8fafe;
+}
+
+.authPage {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.authCard {
+  width: min(460px, 100%);
+  background: #fff;
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 22px;
+}
+
+.authHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.authLogo {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid #d7deee;
+}
+
+.authTitle {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.authText {
+  margin: 6px 0 0;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 960px) {
+  .grid2,
+  .grid3 {
+    grid-template-columns: 1fr;
+  }
+}

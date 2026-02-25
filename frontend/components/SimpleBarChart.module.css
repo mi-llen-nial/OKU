@@ -1,0 +1,49 @@
+.empty {
+  color: var(--ink-muted);
+  font-size: 0.92rem;
+}
+
+.chart {
+  display: grid;
+  gap: 10px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 72px 1fr 56px;
+  align-items: center;
+  gap: 10px;
+}
+
+.label {
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+}
+
+.track {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  border: 1px solid #dde4f2;
+  background: #edf1f9;
+}
+
+.fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand-primary), var(--brand-secondary));
+}
+
+.value {
+  text-align: right;
+  color: var(--ink-strong);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 700px) {
+  .row {
+    grid-template-columns: 58px 1fr 50px;
+    gap: 8px;
+  }
+}

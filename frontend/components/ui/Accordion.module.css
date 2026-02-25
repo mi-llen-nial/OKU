@@ -1,0 +1,36 @@
+.root {
+  display: grid;
+  gap: 10px;
+}
+
+.item {
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-md);
+  background: #fff;
+  overflow: hidden;
+}
+
+.summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  background: #f8fafe;
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.body {
+  border-top: 1px solid var(--line-color);
+  padding: 12px 14px;
+  color: var(--ink-muted);
+  display: grid;
+  gap: 8px;
+}

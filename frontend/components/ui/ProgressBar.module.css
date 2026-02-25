@@ -1,0 +1,15 @@
+.track {
+  width: 100%;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: #edf1f9;
+  border: 1px solid #dde4f2;
+}
+
+.fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand-primary) 0%, var(--brand-secondary) 100%);
+  transition: width 0.22s ease;
+}
