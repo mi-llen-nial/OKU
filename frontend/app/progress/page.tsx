@@ -33,7 +33,9 @@ export default function ProgressPage() {
     return (
       <AuthGuard roles={["student"]}>
         <AppShell>
-          <Card title="Прогресс">Загрузка...</Card>
+          <div className={styles.page}>
+            <Card title="Прогресс">Загрузка...</Card>
+          </div>
         </AppShell>
       </AuthGuard>
     );

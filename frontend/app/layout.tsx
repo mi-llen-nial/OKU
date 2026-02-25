@@ -13,6 +13,11 @@ const bodyFont = Inter({
 export const metadata: Metadata = {
   title: "OKU",
   description: "AI-платформа персонализированного тестирования",
+  icons: {
+    icon: "/assets/logo/logo.svg",
+    shortcut: "/assets/logo/logo.svg",
+    apple: "/assets/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

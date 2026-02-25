@@ -416,7 +416,9 @@ export default function TestRunnerPage() {
     return (
       <AuthGuard roles={["student"]}>
         <AppShell>
-          <Card title="Загрузка теста">Подготавливаем вопросы...</Card>
+          <div className={styles.page}>
+            <Card title="Загрузка теста">Подготавливаем вопросы...</Card>
+          </div>
         </AppShell>
       </AuthGuard>
     );
@@ -426,7 +428,9 @@ export default function TestRunnerPage() {
     return (
       <AuthGuard roles={["student"]}>
         <AppShell>
-          <Card title="Тест не найден">Проверьте ссылку или сгенерируйте новый тест.</Card>
+          <div className={styles.page}>
+            <Card title="Тест не найден">Проверьте ссылку или сгенерируйте новый тест.</Card>
+          </div>
         </AppShell>
       </AuthGuard>
     );
@@ -435,96 +439,98 @@ export default function TestRunnerPage() {
   return (
     <AuthGuard roles={["student"]}>
       <AppShell>
-        <Card
-          title={`Тест #${test.id}`}
-          subtitle={`${currentIndex + 1} / ${total} вопрос`}
-          action={<Badge variant="info">{Math.round(progress)}%</Badge>}
-        >
-          <div className={styles.header}>
-            <div className={styles.headerBadges}>
-              <Badge>{test.mode.toUpperCase()}</Badge>
-              <Badge>{test.language}</Badge>
-              <Badge>{test.difficulty}</Badge>
-            </div>
-            <div className={styles.headerMeta}>
-              <span className={styles.metaText}>Таймер: {formatDuration(elapsedSeconds)}</span>
-              {timeLimitSeconds !== null && (
-                <span className={styles.metaText}>
-                  Лимит: {formatDuration(timeLimitSeconds)}
-                </span>
-              )}
-              <span className={styles.metaText}>Предупреждения: {integrityWarnings.length}</span>
-            </div>
-            <div style={{ minWidth: 180, flex: "1 1 220px" }}>
-              <ProgressBar value={progress} />
-            </div>
-          </div>
-          {isTimeLimitReached && (
-            <div className={styles.timeLimitError}>Лимит времени достигнут. Отправляем тест на проверку...</div>
-          )}
-        </Card>
-
-        <Card title="Вопрос">
-          <div className={styles.questionWrap}>
-            <h3 className={styles.questionTitle}>{sanitizeQuestionPrompt(question.prompt)}</h3>
-
-            {test.mode === "audio" && (
-              <div className={styles.audioControls}>
-                <Button variant="secondary" disabled={audioLoading} onClick={() => void speakQuestion(question)}>
-                  <Volume2 size={16} /> {audioLoading ? "Готовим аудио..." : audioPlaying ? "Повторить озвучку" : "Озвучить вопрос"}
-                </Button>
-                <Button variant="ghost" disabled={!audioPlaying && !audioLoading} onClick={stopAudio}>
-                  <VolumeX size={16} /> Стоп
-                </Button>
+        <div className={styles.page}>
+          <Card
+            title={`Тест #${test.id}`}
+            subtitle={`${currentIndex + 1} / ${total} вопрос`}
+            action={<Badge variant="info">{Math.round(progress)}%</Badge>}
+          >
+            <div className={styles.header}>
+              <div className={styles.headerBadges}>
+                <Badge>{test.mode.toUpperCase()}</Badge>
+                <Badge>{test.language}</Badge>
+                <Badge>{test.difficulty}</Badge>
               </div>
+              <div className={styles.headerMeta}>
+                <span className={styles.metaText}>Таймер: {formatDuration(elapsedSeconds)}</span>
+                {timeLimitSeconds !== null && (
+                  <span className={styles.metaText}>
+                    Лимит: {formatDuration(timeLimitSeconds)}
+                  </span>
+                )}
+                <span className={styles.metaText}>Предупреждения: {integrityWarnings.length}</span>
+              </div>
+              <div style={{ minWidth: 180, flex: "1 1 220px" }}>
+                <ProgressBar value={progress} />
+              </div>
+            </div>
+            {isTimeLimitReached && (
+              <div className={styles.timeLimitError}>Лимит времени достигнут. Отправляем тест на проверку...</div>
             )}
-            {test.mode === "audio" && audioError && <div className={styles.audioError}>{audioError}</div>}
+          </Card>
 
-            {question.type === "single_choice" && renderSingleChoice(question, answerForCurrent, updateAnswer)}
-            {question.type === "multi_choice" && renderMultiChoice(question, answerForCurrent, toggleMulti)}
-            {(question.type === "short_text" || question.type === "oral_answer") &&
-              renderTextAnswer(
-                question,
-                answerForCurrent,
-                updateAnswer,
-                handleTextFocus,
-                handleTextChange,
-                handleTextPaste,
-                handleTextShortcut,
+          <Card title="Вопрос">
+            <div className={styles.questionWrap}>
+              <h3 className={styles.questionTitle}>{sanitizeQuestionPrompt(question.prompt)}</h3>
+
+              {test.mode === "audio" && (
+                <div className={styles.audioControls}>
+                  <Button variant="secondary" disabled={audioLoading} onClick={() => void speakQuestion(question)}>
+                    <Volume2 size={16} /> {audioLoading ? "Готовим аудио..." : audioPlaying ? "Повторить озвучку" : "Озвучить вопрос"}
+                  </Button>
+                  <Button variant="ghost" disabled={!audioPlaying && !audioLoading} onClick={stopAudio}>
+                    <VolumeX size={16} /> Стоп
+                  </Button>
+                </div>
               )}
-            {question.type === "matching" && renderMatching(question, answerForCurrent, updateMatching)}
-          </div>
+              {test.mode === "audio" && audioError && <div className={styles.audioError}>{audioError}</div>}
 
-          {error && <div className="errorText">{error}</div>}
+              {question.type === "single_choice" && renderSingleChoice(question, answerForCurrent, updateAnswer)}
+              {question.type === "multi_choice" && renderMultiChoice(question, answerForCurrent, toggleMulti)}
+              {(question.type === "short_text" || question.type === "oral_answer") &&
+                renderTextAnswer(
+                  question,
+                  answerForCurrent,
+                  updateAnswer,
+                  handleTextFocus,
+                  handleTextChange,
+                  handleTextPaste,
+                  handleTextShortcut,
+                )}
+              {question.type === "matching" && renderMatching(question, answerForCurrent, updateMatching)}
+            </div>
 
-          <div className={styles.navRow}>
-            <Button
-              variant="ghost"
-              disabled={currentIndex === 0}
-              onClick={() => {
-                stopAudio();
-                setCurrentIndex((idx) => Math.max(0, idx - 1));
-              }}
-            >
-              Назад
-            </Button>
+            {error && <div className="errorText">{error}</div>}
 
-            {currentIndex < total - 1 ? (
+            <div className={styles.navRow}>
               <Button
+                variant="ghost"
+                disabled={currentIndex === 0}
                 onClick={() => {
                   stopAudio();
-                  setCurrentIndex((idx) => Math.min(total - 1, idx + 1));
+                  setCurrentIndex((idx) => Math.max(0, idx - 1));
                 }}
               >
-                Далее
+                Назад
               </Button>
-            ) : (
-              <Button disabled={submitting} onClick={() => submit()}>
-                {submitting ? "Проверяем ответы..." : "Завершить тест"}
-              </Button>
-            )}
-          </div>
-        </Card>
+
+              {currentIndex < total - 1 ? (
+                <Button
+                  onClick={() => {
+                    stopAudio();
+                    setCurrentIndex((idx) => Math.min(total - 1, idx + 1));
+                  }}
+                >
+                  Далее
+                </Button>
+              ) : (
+                <Button disabled={submitting} onClick={() => submit()}>
+                  {submitting ? "Проверяем ответы..." : "Завершить тест"}
+                </Button>
+              )}
+            </div>
+          </Card>
+        </div>
       </AppShell>
     </AuthGuard>
   );

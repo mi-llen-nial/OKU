@@ -1,3 +1,12 @@
+.page {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  gap: 24px;
+  padding-bottom: 56px;
+}
+
 .header {
   display: flex;
   justify-content: space-between;

@@ -21,6 +21,10 @@
   width: 82px;
 }
 
+.sidebarMobile {
+  grid-template-rows: auto auto 1fr auto;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -70,6 +74,36 @@
   gap: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--line-color);
+}
+
+.mobileToolRow {
+  display: grid;
+  gap: 8px;
+}
+
+.mobileToolButton {
+  justify-content: flex-start;
+}
+
+.mobileToolButton span {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.mobileProfile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  background: #fff;
+}
+
+.mobileProfileMeta {
+  display: grid;
+  gap: 2px;
+  line-height: 1.1;
 }
 
 .main {
@@ -220,8 +254,7 @@
   top: 0;
   left: 0;
   bottom: 0;
-  width: 82%;
-  max-width: 320px;
+  width: min(88vw, 340px);
   z-index: 26;
   transform: translateX(-100%);
   transition: transform 0.22s ease;
@@ -253,18 +286,56 @@
   }
 
   .topbar {
-    padding: 10px 12px;
+    justify-content: flex-start;
+    padding: 10px 14px;
   }
 
   .topbarRight {
-    gap: 6px;
-  }
-
-  .profileMeta {
     display: none;
   }
 
+  .topbarTitle p {
+    display: none;
+  }
+
+  .profileMeta,
+  .mobileSidebar .sidebarCollapsed .brandText {
+    display: none;
+  }
+
+  .mobileSidebar .sidebarCollapsed {
+    width: 100%;
+  }
+
   .content {
-    padding: 18px;
+    padding: 16px;
+    gap: 20px;
+  }
+
+  .mobileSidebar .sidebar {
+    padding: 14px 10px;
+  }
+
+  .mobileSidebar .footer {
+    margin-top: auto;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar {
+    padding: 8px 12px;
+  }
+
+  .topbarTitle h1 {
+    font-size: 1rem;
+  }
+
+  .content {
+    padding: 14px;
+  }
+
+  .mobileSidebar {
+    width: min(92vw, 340px);
   }
 }

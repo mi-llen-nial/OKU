@@ -38,7 +38,9 @@ export default function HistoryPage() {
     return (
       <AuthGuard roles={["student"]}>
         <AppShell>
-          <Card title="История">Загрузка...</Card>
+          <div className={styles.page}>
+            <Card title="История">Загрузка...</Card>
+          </div>
         </AppShell>
       </AuthGuard>
     );

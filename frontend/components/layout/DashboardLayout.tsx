@@ -136,50 +136,110 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? "1" : "0");
   };
 
-  const renderSidebar = () => (
-    <aside className={`${styles.sidebar} ${collapsed ? styles.sidebarCollapsed : ""}`}>
-      <div className={styles.brand}>
-        <img alt="OKU logo" className={styles.logo} src={assetPaths.logo.png} />
-        <div className={styles.brandText}>
-          <strong>OKU</strong>
-          <small>Learning Platform</small>
-        </div>
-      </div>
-
-      <div className={styles.collapseRow}>
-        <Button variant="ghost" onClick={toggleCollapsed} aria-label={collapsed ? "Раскрыть меню" : "Свернуть меню"}>
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </Button>
-      </div>
-
-      <nav className={styles.nav}>
-        {navItems.map((item) => (
-          <SidebarItem
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={item.icon}
-            collapsed={collapsed}
-            active={isActive(item.href)}
-            onClick={() => setMobileOpen(false)}
-          />
-        ))}
-      </nav>
-
-      <div className={styles.footer}>
-        <Button block variant="ghost" onClick={logout}>
-          <LogOut size={16} /> {!collapsed ? "Выход" : ""}
-        </Button>
-      </div>
-    </aside>
+  const renderLanguageSwitch = () => (
+    <div className={styles.langSwitch}>
+      <button
+        className={`${styles.langBtn} ${uiLanguage === "RU" ? styles.langActive : ""}`}
+        type="button"
+        onClick={() => setUiLanguage("RU")}
+      >
+        RU
+      </button>
+      <button
+        className={`${styles.langBtn} ${uiLanguage === "KZ" ? styles.langActive : ""}`}
+        type="button"
+        onClick={() => setUiLanguage("KZ")}
+      >
+        KZ
+      </button>
+    </div>
   );
+
+  const renderSidebar = (variant: "desktop" | "mobile") => {
+    const isMobileVariant = variant === "mobile";
+    const isCollapsedView = isMobileVariant ? false : collapsed;
+
+    return (
+      <aside className={`${styles.sidebar} ${isCollapsedView ? styles.sidebarCollapsed : ""} ${isMobileVariant ? styles.sidebarMobile : ""}`}>
+        <div className={styles.brand}>
+          <img alt="OKU logo" className={styles.logo} src={assetPaths.logo.png} />
+          <div className={styles.brandText}>
+            <strong>OKU</strong>
+            <small>Learning Platform</small>
+          </div>
+        </div>
+
+        <div className={styles.collapseRow}>
+          {isMobileVariant ? (
+            <Button variant="ghost" onClick={() => setMobileOpen(false)} aria-label="Закрыть меню">
+              <PanelLeftClose size={16} />
+            </Button>
+          ) : (
+            <Button variant="ghost" onClick={toggleCollapsed} aria-label={collapsed ? "Раскрыть меню" : "Свернуть меню"}>
+              {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            </Button>
+          )}
+        </div>
+
+        <nav className={styles.nav}>
+          {navItems.map((item) => (
+            <SidebarItem
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={item.icon}
+              collapsed={isCollapsedView}
+              active={isActive(item.href)}
+              onClick={() => {
+                if (isMobileVariant) {
+                  setMobileOpen(false);
+                }
+              }}
+            />
+          ))}
+        </nav>
+
+        <div className={styles.footer}>
+          {isMobileVariant ? (
+            <>
+              {renderLanguageSwitch()}
+              <div className={styles.mobileToolRow}>
+                <Button className={styles.mobileToolButton} variant="ghost" aria-label="Уведомления">
+                  <Bell size={16} />
+                  <span>Уведомления</span>
+                </Button>
+                <Button className={styles.mobileToolButton} variant="ghost" aria-label="Тема">
+                  <Moon size={16} />
+                  <span>Тема</span>
+                </Button>
+              </div>
+              <div className={styles.mobileProfile}>
+                <span className={styles.avatar}>{userInitial}</span>
+                <div className={styles.mobileProfileMeta}>
+                  <span className={styles.userName}>{user?.username ?? "user"}</span>
+                  <span className={styles.userRole}>{user?.role === "teacher" ? "Учитель" : "Студент"}</span>
+                </div>
+              </div>
+              <Button block variant="ghost" onClick={logout}>
+                <LogOut size={16} /> Выход
+              </Button>
+            </>
+          ) : (
+            <Button block variant="ghost" onClick={logout}>
+              <LogOut size={16} /> {!collapsed ? "Выход" : ""}
+            </Button>
+          )}
+        </div>
+      </aside>
+    );
+  };
 
   return (
     <div className={styles.frame}>
-      {renderSidebar()}
+      {renderSidebar("desktop")}
 
       <div className={styles.overlay + (mobileOpen ? ` ${styles.overlayOpen}` : "")} onClick={() => setMobileOpen(false)} />
-      <div className={styles.mobileSidebar + (mobileOpen ? ` ${styles.mobileSidebarOpen}` : "")}>{renderSidebar()}</div>
+      <div className={styles.mobileSidebar + (mobileOpen ? ` ${styles.mobileSidebarOpen}` : "")}>{renderSidebar("mobile")}</div>
 
       <div className={styles.main}>
         <header className={styles.topbar}>
@@ -194,22 +254,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
 
           <div className={styles.topbarRight}>
-            <div className={styles.langSwitch}>
-              <button
-                className={`${styles.langBtn} ${uiLanguage === "RU" ? styles.langActive : ""}`}
-                type="button"
-                onClick={() => setUiLanguage("RU")}
-              >
-                RU
-              </button>
-              <button
-                className={`${styles.langBtn} ${uiLanguage === "KZ" ? styles.langActive : ""}`}
-                type="button"
-                onClick={() => setUiLanguage("KZ")}
-              >
-                KZ
-              </button>
-            </div>
+            {renderLanguageSwitch()}
 
             <Button className={styles.iconButton} variant="ghost" aria-label="Уведомления">
               <Bell size={16} />
