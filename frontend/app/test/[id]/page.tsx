@@ -196,7 +196,8 @@ function renderSingleChoice(
             onChange={() => updateAnswer(question.id, { selected_option_ids: [option.id] })}
             type="radio"
           />
-          {option.text}
+          <span className={styles.optionLabel}>{extractOptionLabel(option.text, option.id)}</span>
+          <span className={styles.optionText}>{stripOptionPrefix(option.text)}</span>
         </label>
       ))}
     </div>
@@ -220,7 +221,8 @@ function renderMultiChoice(
             onChange={() => toggleMulti(question.id, option.id)}
             type="checkbox"
           />
-          {option.text}
+          <span className={styles.optionLabel}>{extractOptionLabel(option.text, option.id)}</span>
+          <span className={styles.optionText}>{stripOptionPrefix(option.text)}</span>
         </label>
       ))}
     </div>
@@ -283,4 +285,17 @@ function renderMatching(
       ))}
     </div>
   );
+}
+
+function extractOptionLabel(text: string, optionId: number): string {
+  const match = text.match(/^\s*([A-Z])\s*[\).:-]/i);
+  if (match?.[1]) {
+    return match[1].toUpperCase();
+  }
+  const base = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return base[optionId] || "?";
+}
+
+function stripOptionPrefix(text: string): string {
+  return text.replace(/^\s*[A-Z]\s*[\).:-]\s*/i, "").trim();
 }

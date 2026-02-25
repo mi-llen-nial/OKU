@@ -83,6 +83,21 @@ export function generateTest(
   }, token);
 }
 
+export function generateMistakesTest(
+  token: string,
+  body: {
+    subject_id?: number;
+    difficulty?: "easy" | "medium" | "hard";
+    language?: "RU" | "KZ";
+    num_questions?: number;
+  } = {},
+) {
+  return apiRequest<Test>("/tests/generate-from-mistakes", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }, token);
+}
+
 export function getTest(token: string, testId: number) {
   return apiRequest<Test>(`/tests/${testId}`, {}, token);
 }

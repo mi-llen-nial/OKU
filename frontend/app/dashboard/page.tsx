@@ -10,7 +10,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import StatWidget from "@/components/ui/StatWidget";
-import { getHistory, getProgress } from "@/lib/api";
+import { generateMistakesTest, getHistory, getProgress } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { HistoryItem, StudentProgress } from "@/lib/types";
 import styles from "@/app/dashboard/dashboard.module.css";
@@ -21,7 +21,8 @@ interface RecommendationCard {
   text: string;
   badge: string;
   action: string;
-  href: string;
+  kind: "link" | "mistakes";
+  href?: string;
 }
 
 export default function DashboardPage() {
@@ -30,6 +31,7 @@ export default function DashboardPage() {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [launchingMistakes, setLaunchingMistakes] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export default function DashboardPage() {
         text: "Короткая практика по вопросам, где вы ошибались в последних попытках.",
         badge: "Приоритет",
         action: "Открыть тесты",
-        href: "/test",
+        kind: "mistakes",
       },
       {
         id: "weak-topic",
@@ -66,6 +68,7 @@ export default function DashboardPage() {
         text: "Сконцентрируйтесь на самой слабой теме, чтобы поднять общий балл.",
         badge: "Персонально",
         action: "Начать тренировку",
+        kind: "link",
         href: "/test",
       },
       {
@@ -76,10 +79,27 @@ export default function DashboardPage() {
           : "Сделайте первую попытку, чтобы система собрала базовый профиль знаний.",
         badge: "Рекомендуем",
         action: hasAttempts ? "Пройти тест" : "Запустить первый тест",
+        kind: "link",
         href: "/test",
       },
     ];
   }, [history.length, progress?.weak_topics]);
+
+  const openMistakesReview = async () => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      setLaunchingMistakes(true);
+      setError("");
+      const test = await generateMistakesTest(token, { num_questions: 10 });
+      router.push(`/test/${test.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось подготовить повторение ошибок");
+    } finally {
+      setLaunchingMistakes(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -178,9 +198,15 @@ export default function DashboardPage() {
                   <Badge variant="normal" className={styles.recommendBadge}>{item.badge}</Badge>
                   <h4 className={styles.recommendTitle}>{item.title}</h4>
                   <p className={styles.recommendText}>{item.text}</p>
-                  <Button variant="secondary" onClick={() => router.push(item.href)}>
-                    {item.action}
-                  </Button>
+                  {item.kind === "mistakes" ? (
+                    <Button variant="secondary" disabled={launchingMistakes} onClick={openMistakesReview}>
+                      {launchingMistakes ? "Подготавливаем..." : item.action}
+                    </Button>
+                  ) : (
+                    <Button variant="secondary" onClick={() => router.push(item.href || "/test")}>
+                      {item.action}
+                    </Button>
+                  )}
                 </article>
               ))}
             </div>

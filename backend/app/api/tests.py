@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from collections import Counter
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.core.deps import CurrentUser, DBSession, require_role
-from app.models import Answer, Question, Recommendation, Result, Subject, Test, User, UserRole
+from app.models import Answer, PreferredLanguage, Question, QuestionType, Recommendation, Result, Subject, Test, TestMode, User, UserRole
 from app.schemas.tests import (
+    GenerateMistakesTestRequest,
     GenerateTestRequest,
     QuestionResponse,
     RecommendationResponse,
@@ -31,6 +35,12 @@ def generate_test(
     if not subject:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subject not found")
 
+    focus_topics = _collect_student_focus_topics(
+        db=db,
+        student_id=current_user.id,
+        subject_id=payload.subject_id,
+    )
+
     generated = ai_service.generate_test(
         subject=subject,
         difficulty=payload.difficulty,
@@ -38,6 +48,7 @@ def generate_test(
         mode=payload.mode,
         num_questions=payload.num_questions,
         user_id=current_user.id,
+        focus_topics=focus_topics,
     )
 
     test = Test(
@@ -66,6 +77,82 @@ def generate_test(
     db.commit()
     db.refresh(test)
 
+    return _build_test_response(test)
+
+
+@router.post("/generate-from-mistakes", response_model=TestResponse)
+def generate_test_from_mistakes(
+    payload: GenerateMistakesTestRequest,
+    db: DBSession,
+    current_user: User = Depends(require_role(UserRole.student)),
+) -> TestResponse:
+    wrong_questions = _load_wrong_questions(
+        db=db,
+        student_id=current_user.id,
+        subject_id=payload.subject_id,
+    )
+    if not wrong_questions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Недостаточно ошибок в истории. Пройдите обычный тест и вернитесь к повторению.",
+        )
+
+    selected_subject_id = payload.subject_id
+    if selected_subject_id is None:
+        subject_counter = Counter(test.subject_id for _, test in wrong_questions)
+        selected_subject_id = subject_counter.most_common(1)[0][0]
+
+    questions_for_subject = [(question, source_test) for question, source_test in wrong_questions if source_test.subject_id == selected_subject_id]
+    if payload.language is not None:
+        questions_for_subject = [(question, source_test) for question, source_test in questions_for_subject if source_test.language == payload.language]
+    selected_pairs = questions_for_subject[: payload.num_questions]
+    if not selected_pairs:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для выбранных параметров нет ошибок в истории.")
+
+    selected_subject = db.get(Subject, selected_subject_id)
+    if not selected_subject:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subject not found")
+
+    selected_language = payload.language or selected_pairs[0][1].language
+    test = Test(
+        student_id=current_user.id,
+        subject_id=selected_subject.id,
+        difficulty=payload.difficulty,
+        language=selected_language,
+        mode=TestMode.text,
+    )
+    db.add(test)
+    db.flush()
+
+    for source_question, source_test in selected_pairs:
+        normalized_type = source_question.type
+        if normalized_type not in {QuestionType.single_choice, QuestionType.multi_choice, QuestionType.short_text}:
+            normalized_type = QuestionType.short_text
+
+        prompt = source_question.prompt
+        if normalized_type == QuestionType.short_text:
+            if selected_language == PreferredLanguage.ru and "краткий" not in prompt.lower():
+                prompt = f"{prompt} Дайте краткий текстовый ответ."
+            if selected_language == PreferredLanguage.kz and "қысқа" not in prompt.lower():
+                prompt = f"{prompt} Қысқа мәтіндік жауап беріңіз."
+
+        cloned = Question(
+            test_id=test.id,
+            type=normalized_type,
+            prompt=prompt,
+            options_json=source_question.options_json if normalized_type != QuestionType.short_text else None,
+            correct_answer_json=source_question.correct_answer_json,
+            explanation_json={
+                **source_question.explanation_json,
+                "source_test_id": source_test.id,
+                "review_mode": "mistakes",
+            },
+            tts_text=None,
+        )
+        test.questions.append(cloned)
+
+    db.commit()
+    db.refresh(test)
     return _build_test_response(test)
 
 
@@ -207,6 +294,63 @@ def regenerate_recommendations(
         advice_text=generated.advice_text,
         generated_tasks=generated.generated_tasks,
     )
+
+
+def _collect_student_focus_topics(db: DBSession, student_id: int, subject_id: int, limit: int = 5) -> list[str]:
+    topic_counter: Counter[str] = Counter()
+
+    weak_topics_rows = db.scalars(
+        select(Recommendation.weak_topics_json)
+        .join(Test, Recommendation.test_id == Test.id)
+        .where(Test.student_id == student_id, Test.subject_id == subject_id)
+    ).all()
+    for topics in weak_topics_rows:
+        for topic in topics:
+            value = str(topic).strip()
+            if value:
+                topic_counter[value] += 1
+
+    wrong_topic_rows = db.scalars(
+        select(Question.explanation_json)
+        .join(Test, Question.test_id == Test.id)
+        .join(Answer, Answer.question_id == Question.id)
+        .where(
+            Test.student_id == student_id,
+            Test.subject_id == subject_id,
+            Answer.is_correct.is_(False),
+        )
+    ).all()
+    for explanation in wrong_topic_rows:
+        topic = str((explanation or {}).get("topic", "")).strip()
+        if topic:
+            topic_counter[topic] += 1
+
+    return [topic for topic, _ in topic_counter.most_common(limit)]
+
+
+def _load_wrong_questions(db: DBSession, student_id: int, subject_id: int | None = None) -> list[tuple[Question, Test]]:
+    query = (
+        db.query(Question, Test)
+        .join(Test, Test.id == Question.test_id)
+        .join(Answer, Answer.question_id == Question.id)
+        .filter(
+            Test.student_id == student_id,
+            Answer.is_correct.is_(False),
+        )
+        .order_by(Test.created_at.desc(), Question.id.desc())
+    )
+    if subject_id is not None:
+        query = query.filter(Test.subject_id == subject_id)
+
+    rows = query.all()
+    output: list[tuple[Question, Test]] = []
+    seen_question_ids: set[int] = set()
+    for question, test in rows:
+        if question.id in seen_question_ids:
+            continue
+        seen_question_ids.add(question.id)
+        output.append((question, test))
+    return output
 
 
 def _load_test(db: DBSession, test_id: int) -> Test:

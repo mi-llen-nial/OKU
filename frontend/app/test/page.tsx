@@ -168,10 +168,12 @@ const SUBJECT_TEMPLATE: Array<Omit<SubjectCatalogItem, "subject_id" | "available
 ];
 
 const DIFFICULTIES: Array<{ value: Difficulty; title: string }> = [
-  { value: "easy", title: "Базовый" },
+  { value: "easy", title: "Лёгкий" },
   { value: "medium", title: "Средний" },
-  { value: "hard", title: "Продвинутый" },
+  { value: "hard", title: "Сложный" },
 ];
+
+const QUESTION_COUNTS = [5, 10, 15, 20, 25] as const;
 
 const ICON_BY_SUBJECT: Record<SubjectIconKey, string> = {
   math: assetPaths.icons.math,
@@ -203,6 +205,7 @@ export default function TestSetupPage() {
   const [language, setLanguage] = useState<Language>("RU");
   const [mode, setMode] = useState<Mode>("text");
   const [numQuestions, setNumQuestions] = useState(10);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -217,6 +220,26 @@ export default function TestSetupPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить предметы"));
   }, []);
+
+  useEffect(() => {
+    if (!isSettingsModalOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loading) {
+        setIsSettingsModalOpen(false);
+        setError("");
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isSettingsModalOpen, loading]);
 
   const subjectCatalog = useMemo<SubjectCatalogItem[]>(() => {
     const apiByNormalizedName = new Map<string, Subject>();
@@ -264,6 +287,13 @@ export default function TestSetupPage() {
   }, [subjects]);
 
   const selectedSubject = useMemo(() => subjects.find((item) => item.id === subjectId) || null, [subjects, subjectId]);
+  const selectedSubjectTitle = selectedSubject ? (language === "RU" ? selectedSubject.name_ru : selectedSubject.name_kz) : "";
+
+  const closeSettingsModal = () => {
+    if (loading) return;
+    setIsSettingsModalOpen(false);
+    setError("");
+  };
 
   const createTest = async () => {
     const token = getToken();
@@ -341,6 +371,7 @@ export default function TestSetupPage() {
 
                       setError("");
                       setSubjectId(item.subject_id);
+                      setIsSettingsModalOpen(true);
                     }}
                   >
                     <img className={styles.subjectIcon} src={ICON_BY_SUBJECT[item.iconKey]} alt={title} />
@@ -352,20 +383,32 @@ export default function TestSetupPage() {
                 );
               })}
             </div>
-          </section>
 
-          <section className={styles.settingsSection}>
-            <div className={styles.settingsHeader}>
-              <h3>Настройки теста</h3>
-              <p>
-                {selectedSubject
-                  ? `Выбран предмет: ${language === "RU" ? selectedSubject.name_ru : selectedSubject.name_kz}`
-                  : "Выберите предмет выше"}
-              </p>
+            {error && !isSettingsModalOpen && <div className="errorText">{error}</div>}
+
+            <div className={styles.actions}>
+              <Button variant="secondary" onClick={() => router.push("/history")}>
+                История попыток
+              </Button>
             </div>
+          </section>
+        </div>
 
-            <div className={styles.settingsGrid}>
-              <div className={styles.settingBlock}>
+        {isSettingsModalOpen && (
+          <div className={styles.modalOverlay} role="presentation" onClick={closeSettingsModal}>
+            <section
+              className={styles.modal}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Настройки теста"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <header className={styles.modalHeader}>
+                <h3>Настройки теста</h3>
+                <p>{selectedSubjectTitle ? `Предмет: ${selectedSubjectTitle}` : "Настройте тест под свои задачи"}</p>
+              </header>
+
+              <div className={styles.modalBlock}>
                 <span className={styles.settingLabel}>Сложность</span>
                 <div className={styles.choiceRow}>
                   {DIFFICULTIES.map((item) => (
@@ -381,23 +424,7 @@ export default function TestSetupPage() {
                 </div>
               </div>
 
-              <div className={styles.settingBlock}>
-                <span className={styles.settingLabel}>Язык</span>
-                <div className={styles.choiceRow}>
-                  {(["RU", "KZ"] as const).map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      className={`${styles.choiceButton} ${language === item ? styles.choiceButtonActive : ""}`}
-                      onClick={() => setLanguage(item)}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className={styles.settingBlock}>
+              <div className={styles.modalBlock}>
                 <span className={styles.settingLabel}>Режим</span>
                 <div className={styles.choiceRow}>
                   {MODES.map((item) => (
@@ -413,28 +440,54 @@ export default function TestSetupPage() {
                 </div>
               </div>
 
-              <label className={styles.questionsField}>
+              <div className={styles.modalBlock}>
+                <span className={styles.settingLabel}>Язык</span>
+                <div className={styles.choiceRow}>
+                  {([
+                    { value: "RU", title: "Русский" },
+                    { value: "KZ", title: "Казахский" },
+                  ] as const).map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      className={`${styles.choiceButton} ${language === item.value ? styles.choiceButtonActive : ""}`}
+                      onClick={() => setLanguage(item.value)}
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={styles.modalBlock}>
                 <span className={styles.settingLabel}>Количество вопросов</span>
-                <input
-                  min={5}
-                  max={20}
-                  type="number"
-                  value={numQuestions}
-                  onChange={(e) => setNumQuestions(Math.max(5, Math.min(20, Number(e.target.value) || 10)))}
-                />
-              </label>
-            </div>
+                <div className={styles.choiceRow}>
+                  {QUESTION_COUNTS.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`${styles.choiceButton} ${numQuestions === value ? styles.choiceButtonActive : ""}`}
+                      onClick={() => setNumQuestions(value)}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-            {error && <div className="errorText">{error}</div>}
+              {error && <div className="errorText">{error}</div>}
 
-            <div className={styles.actions}>
-              <Button disabled={loading || !subjectId} onClick={createTest}>
-                {loading ? "Генерируем тест..." : "Начать тест"}
-              </Button>
-              <Button variant="secondary" onClick={() => router.push("/history")}>История попыток</Button>
-            </div>
-          </section>
-        </div>
+              <div className={styles.modalActions}>
+                <Button disabled={loading || !subjectId} onClick={createTest}>
+                  {loading ? "Генерируем тест..." : "Начать тест"}
+                </Button>
+                <Button variant="ghost" onClick={closeSettingsModal}>
+                  Отмена
+                </Button>
+              </div>
+            </section>
+          </div>
+        )}
       </AppShell>
     </AuthGuard>
   );

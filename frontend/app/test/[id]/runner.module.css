@@ -31,6 +31,25 @@
   width: auto;
 }
 
+.optionLabel {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid #d9d9e6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  background: #fff;
+  flex: 0 0 24px;
+}
+
+.optionText {
+  min-width: 0;
+}
+
 .matchRow {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) minmax(160px, 1fr);

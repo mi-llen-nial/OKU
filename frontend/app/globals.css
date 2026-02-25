@@ -39,11 +39,9 @@ body {
 body {
   font-family: var(--font-body);
   letter-spacing: 0.007em;
+  font-weight: 350;
   color: var(--ink-strong);
-  background:
-    radial-gradient(circle at 100% 0, rgba(106, 99, 245, 0.1), transparent 35%),
-    radial-gradient(circle at 0 20%, rgba(106, 99, 245, 0.08), transparent 35%),
-    #ececf4;
+  background: #f4f5fd;
 }
 
 h1,
@@ -57,6 +55,7 @@ h5 {
 
 p {
   line-height: 1.5;
+  font-weight: 350;
 }
 
 a {

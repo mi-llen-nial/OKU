@@ -14,6 +14,13 @@ class GenerateTestRequest(BaseModel):
     num_questions: int = Field(default=10, ge=3, le=30)
 
 
+class GenerateMistakesTestRequest(BaseModel):
+    subject_id: int | None = None
+    difficulty: DifficultyLevel = DifficultyLevel.medium
+    language: PreferredLanguage | None = None
+    num_questions: int = Field(default=10, ge=1, le=30)
+
+
 class GeneratedQuestionPayload(BaseModel):
     type: QuestionType
     prompt: str
