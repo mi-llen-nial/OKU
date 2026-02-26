@@ -126,13 +126,30 @@ export function getTest(token: string, testId: number) {
 }
 
 export async function getQuestionTtsAudio(token: string, testId: number, questionId: number) {
-  const response = await fetch(`${API_URL}/tests/${testId}/questions/${questionId}/tts`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}/tests/${testId}/questions/${questionId}/tts`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Превышено время ожидания серверного TTS.");
+    }
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Не удалось выполнить запрос TTS.");
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     let detail = `Request failed / Сұрау қатесі: ${response.status}`;

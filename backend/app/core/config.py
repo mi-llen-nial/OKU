@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     edge_tts_rate: str = "+0%"
     edge_tts_pitch: str = "+0Hz"
     edge_tts_volume: str = "+0%"
+    tts_timeout_seconds: int = 20
     elevenlabs_api_key: str = ""
     elevenlabs_base_url: str = "https://api.elevenlabs.io/v1"
     elevenlabs_model_id: str = "eleven_multilingual_v2"

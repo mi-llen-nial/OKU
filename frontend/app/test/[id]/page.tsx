@@ -76,7 +76,7 @@ export default function TestRunnerPage() {
   const router = useRouter();
   const testId = Number(params.id);
   const uiLanguage = useUiLanguage();
-  const t = (ru: string, kz: string) => tr(uiLanguage, ru, kz);
+  const t = useCallback((ru: string, kz: string) => tr(uiLanguage, ru, kz), [uiLanguage]);
 
   const [test, setTest] = useState<Test | null>(null);
   const [answers, setAnswers] = useState<AnswerMap>({});

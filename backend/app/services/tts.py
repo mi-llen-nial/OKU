@@ -73,10 +73,13 @@ class EdgeTTSProvider:
 
         try:
             audio_bytes = _run_async(
-                self._synthesize_async(
-                    edge_tts=edge_tts,
-                    text=prepared_text,
-                    voice_name=voice_name,
+                asyncio.wait_for(
+                    self._synthesize_async(
+                        edge_tts=edge_tts,
+                        text=prepared_text,
+                        voice_name=voice_name,
+                    ),
+                    timeout=max(1, int(settings.tts_timeout_seconds)),
                 )
             )
         except Exception as exc:  # noqa: BLE001
