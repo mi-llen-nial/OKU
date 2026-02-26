@@ -80,7 +80,7 @@ class EdgeTTSProvider:
                 )
             )
         except Exception as exc:  # noqa: BLE001
-            raise TTSServiceError(f"Edge TTS error: {exc}") from exc
+            raise TTSServiceError(f"Ошибка Edge TTS: {exc}") from exc
 
         if not audio_bytes:
             raise TTSServiceError("Edge TTS вернул пустой аудио-ответ.")
@@ -191,7 +191,7 @@ class ElevenLabsTTSProvider:
             detail = response.text.strip()
             if len(detail) > 400:
                 detail = detail[:400] + "..."
-            raise TTSServiceError(f"ElevenLabs error {response.status_code}: {detail}")
+            raise TTSServiceError(f"Ошибка ElevenLabs {response.status_code}: {detail}")
 
         audio_bytes = bytes(response.content)
         if not audio_bytes:

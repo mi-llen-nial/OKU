@@ -1,8 +1,13 @@
 import {
   AuthResponse,
   GroupAnalytics,
-  GroupWeakTopics,
   HistoryItem,
+  ProfileData,
+  ProfileInvitation,
+  TeacherGroup,
+  TeacherGroupMembers,
+  TeacherInvitation,
+  GroupWeakTopics,
   StudentProgress,
   Subject,
   Test,
@@ -29,7 +34,7 @@ async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    let detail = `Request failed: ${response.status}`;
+    let detail = `Ошибка запроса: ${response.status}`;
     try {
       const payload = await response.json();
       detail = payload.detail || detail;
@@ -44,10 +49,13 @@ async function apiRequest<T>(
 
 export function register(body: {
   email: string;
+  full_name: string;
   username: string;
   password: string;
   role: "student" | "teacher";
   preferred_language: "RU" | "KZ";
+  education_level?: "school" | "college" | "university" | null;
+  direction?: string | null;
   group_id?: number | null;
 }) {
   return apiRequest<AuthResponse>("/auth/register", {
@@ -84,6 +92,20 @@ export function generateTest(
   }, token);
 }
 
+export function generateExamTest(
+  token: string,
+  body: {
+    exam_type: "ent" | "ielts";
+    language: "RU" | "KZ";
+    ent_profile_subject_id?: number;
+  },
+) {
+  return apiRequest<Test>("/tests/generate-exam", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }, token);
+}
+
 export function generateMistakesTest(
   token: string,
   body: {
@@ -113,7 +135,7 @@ export async function getQuestionTtsAudio(token: string, testId: number, questio
   });
 
   if (!response.ok) {
-    let detail = `Request failed: ${response.status}`;
+    let detail = `Ошибка запроса: ${response.status}`;
     try {
       const payload = await response.json();
       detail = payload.detail || detail;
@@ -176,4 +198,51 @@ export function getGroupWeakTopics(token: string, groupId: number) {
 
 export function getStudentProgressByTeacher(token: string, studentId: number) {
   return apiRequest<StudentProgress>(`/teacher/students/${studentId}/progress`, {}, token);
+}
+
+export function getStudentHistoryByTeacher(token: string, studentId: number) {
+  return apiRequest<HistoryItem[]>(`/teacher/students/${studentId}/history`, {}, token);
+}
+
+export function getTeacherGroups(token: string) {
+  return apiRequest<TeacherGroup[]>("/teacher/groups", {}, token);
+}
+
+export function createTeacherGroup(
+  token: string,
+  body: { name: string; student_ids: number[] },
+) {
+  return apiRequest<TeacherGroup>("/teacher/groups", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }, token);
+}
+
+export function getTeacherGroupMembers(token: string, groupId: number) {
+  return apiRequest<TeacherGroupMembers>(`/teacher/groups/${groupId}/members`, {}, token);
+}
+
+export function sendTeacherInvitation(token: string, body: { username: string; group_id?: number }) {
+  return apiRequest<TeacherInvitation>("/teacher/invitations", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }, token);
+}
+
+export function getTeacherInvitations(token: string) {
+  return apiRequest<TeacherInvitation[]>("/teacher/invitations", {}, token);
+}
+
+export function getMyProfile(token: string) {
+  return apiRequest<ProfileData>("/profile/me", {}, token);
+}
+
+export function respondInvitation(
+  token: string,
+  invitationId: number,
+  action: "accept" | "decline",
+) {
+  return apiRequest<ProfileInvitation>(`/profile/invitations/${invitationId}/${action}`, {
+    method: "POST",
+  }, token);
 }

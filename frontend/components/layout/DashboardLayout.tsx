@@ -2,17 +2,18 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BarChart3,
   Bell,
   BookOpenCheck,
   ChartSpline,
   Clock3,
+  FolderPlus,
   LayoutGrid,
   LogOut,
   Menu,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Users,
 } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -41,9 +42,13 @@ function getPageTitle(pathname: string, role?: string) {
   if (pathname.startsWith("/test")) return "Тесты";
   if (pathname.startsWith("/results")) return "Результаты";
   if (pathname.startsWith("/history")) return "История";
-  if (pathname.startsWith("/progress")) return "Прогресс";
-  if (pathname.startsWith("/teacher")) return "Аналитика";
-  return role === "teacher" ? "Аналитика" : "OKU";
+  if (pathname.startsWith("/progress")) return "Аналитика";
+  if (pathname.startsWith("/teacher/create-group")) return "Создать группу";
+  if (pathname.startsWith("/teacher/groups")) return "Группа";
+  if (pathname.startsWith("/teacher/students")) return "Аналитика студента";
+  if (pathname === "/teacher") return "Группы";
+  if (pathname.startsWith("/profile")) return "Профиль";
+  return role === "teacher" ? "Группы" : "OKU";
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -81,8 +86,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       return [
         {
           href: "/teacher",
-          label: "Аналитика",
-          icon: <BarChart3 size={18} />,
+          label: "Группы",
+          icon: <Users size={18} />,
+        },
+        {
+          href: "/teacher/create-group",
+          label: "Создать группу",
+          icon: <FolderPlus size={18} />,
         },
       ];
     }
@@ -105,13 +115,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       },
       {
         href: "/progress",
-        label: "Прогресс",
+        label: "Аналитика",
         icon: <ChartSpline size={18} />,
       },
     ];
   }, [user?.role]);
 
   const isActive = (href: string) => {
+    if (href === "/teacher") {
+      return pathname === "/teacher" || pathname.startsWith("/teacher/groups/") || pathname.startsWith("/teacher/students/");
+    }
+    if (href === "/teacher/create-group") {
+      return pathname === "/teacher/create-group";
+    }
     if (href === "/test") {
       return pathname.startsWith("/test") || pathname.startsWith("/results");
     }
@@ -127,7 +143,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const logout = () => {
     clearSession();
-    router.push("/login");
+    router.replace("/");
   };
 
   const toggleCollapsed = () => {
@@ -162,10 +178,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return (
       <aside className={`${styles.sidebar} ${isCollapsedView ? styles.sidebarCollapsed : ""} ${isMobileVariant ? styles.sidebarMobile : ""}`}>
         <div className={styles.brand}>
-          <img alt="OKU logo" className={styles.logo} src={assetPaths.logo.png} />
+          <img alt="Логотип OKU" className={styles.logo} src={assetPaths.logo.png} />
           <div className={styles.brandText}>
             <strong>OKU</strong>
-            <small>Learning Platform</small>
+            <small>Образовательная платформа</small>
           </div>
         </div>
 
@@ -213,13 +229,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <span>Тема</span>
                 </Button>
               </div>
-              <div className={styles.mobileProfile}>
+              <button type="button" className={`${styles.mobileProfile} ${styles.profileButton}`} onClick={() => router.push("/profile")}>
                 <span className={styles.avatar}>{userInitial}</span>
                 <div className={styles.mobileProfileMeta}>
                   <span className={styles.userName}>{user?.username ?? "user"}</span>
                   <span className={styles.userRole}>{user?.role === "teacher" ? "Учитель" : "Студент"}</span>
                 </div>
-              </div>
+              </button>
               <Button block variant="ghost" onClick={logout}>
                 <LogOut size={16} /> Выход
               </Button>
@@ -263,13 +279,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <Moon size={16} />
             </Button>
 
-            <div className={styles.profile}>
+            <button type="button" className={`${styles.profile} ${styles.profileButton}`} onClick={() => router.push("/profile")}>
               <span className={styles.avatar}>{userInitial}</span>
               <div className={styles.profileMeta}>
                 <span className={styles.userName}>{user?.username ?? "user"}</span>
                 <span className={styles.userRole}>{user?.role === "teacher" ? "Учитель" : "Студент"}</span>
               </div>
-            </div>
+            </button>
 
             <Button className={styles.iconButton} variant="ghost" onClick={logout} aria-label="Выйти">
               <LogOut size={16} />

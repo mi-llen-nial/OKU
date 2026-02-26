@@ -3,36 +3,162 @@
   max-width: 1120px;
   margin: 0 auto;
   display: grid;
-  gap: 24px;
+  gap: 80px;
   padding-bottom: 56px;
 }
 
-.controls {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
-
-.layout {
+.section {
   display: grid;
-  gap: 14px;
-  grid-template-columns: 1fr 1fr;
+  gap: 32px;
 }
 
-.studentPanel {
+.sectionHeader {
+  text-align: center;
   display: grid;
-  gap: 12px;
-}
-
-.topicCloud {
-  display: flex;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
-@media (max-width: 960px) {
-  .layout {
+.title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 16px;
+  font-weight: 350;
+}
+
+.groupsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.groupCard {
+  border: none;
+  border-radius: 16px;
+  background: #fff;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.groupCard:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.groupIcon {
+  color: var(--brand-primary);
+}
+
+.groupBody h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.groupBody p {
+  margin: 6px 0 0;
+  color: var(--ink-muted);
+  font-size: 16px;
+  font-weight: 350;
+}
+
+.attentionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.attentionCard {
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.warning {
+  margin: 0;
+  font-size: 16px;
+  color: #cf2f48;
+  font-weight: 600;
+}
+
+.studentRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.studentRow h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.studentRow p {
+  margin: 4px 0 0;
+  font-size: 16px;
+  color: var(--ink-muted);
+  font-weight: 350;
+}
+
+.emptyState {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.emptyState p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.footer {
+  text-align: center;
+  color: #737373;
+  font-size: 14px;
+  font-weight: 350;
+  padding-bottom: 8px;
+}
+
+@media (max-width: 1024px) {
+  .groupsGrid,
+  .attentionGrid {
     grid-template-columns: 1fr;
+  }
+
+  .title {
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 640px) {
+  .title {
+    font-size: 20px;
+  }
+
+  .subtitle,
+  .groupBody h3,
+  .warning,
+  .studentRow h3 {
+    font-size: 14px;
+  }
+
+  .groupBody p,
+  .studentRow p,
+  .footer {
+    font-size: 12px;
   }
 }

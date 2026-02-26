@@ -331,35 +331,62 @@
 
 @media (max-width: 640px) {
   .page {
-    gap: 56px;
+    gap: 80px;
     padding-bottom: 36px;
   }
 
   .section {
-    gap: 20px;
+    gap: 30px;
   }
 
   .sectionHeaderCentered {
+    gap: 12px;
     justify-items: start;
     text-align: left;
   }
 
+  .sectionTitle {
+    font-size: 20px;
+  }
+
   .metricsGrid {
-    grid-template-columns: 1fr;
-    gap: 20px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px 22px;
+  }
+
+  .metricItem {
+    gap: 6px;
+  }
+
+  .sectionSubtitle {
+    font-size: 14px;
+  }
+
+  .metricLabel {
+    font-size: 14px;
+  }
+
+  .metricMeta {
+    font-size: 12px;
   }
 
   .metricValue,
   .metricValueText {
-    font-size: 36px;
+    font-size: 24px;
   }
 
   .attemptCard {
-    padding: 14px;
+    gap: 20px;
+    padding: 18px;
+  }
+
+  .attemptList {
+    gap: 28px;
   }
 
   .attemptBody {
     align-items: flex-start;
+    gap: 16px;
   }
 
   .attemptIcon {
@@ -372,24 +399,44 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-items: start;
-    gap: 6px 12px;
+    gap: 9px 18px;
   }
 
   .attemptScore {
     grid-column: 1 / -1;
+    font-size: 12px;
+  }
+
+  .attemptDate,
+  .metaStrong,
+  .attemptTopics,
+  .recommendText,
+  .showMoreButton {
+    font-size: 12px;
+  }
+
+  .attemptTitle,
+  .recommendLabel,
+  .recommendTitle,
+  .resultButton,
+  .recommendAction,
+  .emptyText,
+  .footer {
+    font-size: 14px;
   }
 
   .recommendGrid {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 24px;
+  }
+
+  .recommendCard {
+    gap: 20px;
+    padding: 18px;
   }
 
   .recommendIcon {
     width: 48px;
     height: 48px;
-  }
-
-  .recommendTitle {
-    font-size: 16px;
   }
 }

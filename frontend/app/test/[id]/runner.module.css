@@ -61,6 +61,31 @@
   gap: 8px;
 }
 
+.oralWrap {
+  display: grid;
+  gap: 8px;
+}
+
+.oralHint {
+  color: #626262;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 350;
+}
+
+.oralControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.oralError {
+  color: #bf1f39;
+  font-size: 14px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
 .audioError {
   color: #bf1f39;
   font-size: 0.88rem;

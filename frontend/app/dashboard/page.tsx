@@ -41,7 +41,7 @@ export default function DashboardPage() {
         setProgress(progressData);
         setHistory(historyData);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Cannot load dashboard data"))
+      .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить данные главной страницы"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -136,7 +136,7 @@ export default function DashboardPage() {
               <article className={styles.statItem}>
                 <h3 className={styles.statLabel}>Лучший результат</h3>
                 <p className={styles.statMeta}>
-                  {bestAttempt ? `${bestAttempt.subject_name} (${difficultyLabel(bestAttempt.difficulty)})` : "Пока нет данных"}
+                  {bestAttempt ? `${attemptTitle(bestAttempt)} (${difficultyLabel(bestAttempt.difficulty)})` : "Пока нет данных"}
                 </p>
                 <p className={styles.statValue}>{progress?.best_percent ?? 0}%</p>
               </article>
@@ -167,6 +167,7 @@ export default function DashboardPage() {
                 <div className={styles.cardGrid}>
                   {recentAttempts.map((item) => {
                     const scoreClass = resolveScoreClass(item.percent);
+                    const title = attemptTitle(item);
 
                     return (
                       <article className={styles.recentCard} key={item.test_id}>
@@ -175,11 +176,11 @@ export default function DashboardPage() {
                         <div className={styles.cardTop}>
                           <img
                             className={styles.cardIcon}
-                            src={resolveSubjectIcon(item.subject_name)}
-                            alt={item.subject_name}
+                            src={resolveSubjectIcon(title)}
+                            alt={title}
                           />
                           <div className={styles.cardInfo}>
-                            <h3 className={styles.cardTitle}>{item.subject_name}</h3>
+                            <h3 className={styles.cardTitle}>{title}</h3>
                             <p className={styles.cardMeta}>
                               {difficultyLabel(item.difficulty)}&nbsp;&nbsp;
                               {languageLabel(item.language)}&nbsp;&nbsp;
@@ -258,6 +259,8 @@ function normalizeText(value: string): string {
 
 function resolveSubjectIcon(subjectName: string): string {
   const key = normalizeText(subjectName);
+  if (key.includes("ielts")) return assetPaths.icons.ielts;
+  if (key.includes("ент") || key.includes("ent")) return assetPaths.icons.ent;
   if (key.includes("алгебр")) return assetPaths.icons.algebra;
   if (key.includes("геометр")) return assetPaths.icons.geometry;
   if (key.includes("физик")) return assetPaths.icons.physics;
@@ -275,6 +278,12 @@ function difficultyLabel(value: HistoryItem["difficulty"]): string {
   if (value === "easy") return "Легкий";
   if (value === "hard") return "Сложный";
   return "Средний";
+}
+
+function attemptTitle(item: Pick<HistoryItem, "subject_name" | "exam_kind">): string {
+  if (item.exam_kind === "ielts") return "IELTS";
+  if (item.exam_kind === "ent") return "ЕНТ";
+  return item.subject_name;
 }
 
 function languageLabel(value: HistoryItem["language"]): string {

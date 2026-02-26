@@ -1,7 +1,10 @@
 export type UserRole = "student" | "teacher";
+export type InvitationStatus = "pending" | "accepted" | "declined";
 export type Difficulty = "easy" | "medium" | "hard";
 export type Language = "RU" | "KZ";
 export type Mode = "text" | "audio" | "oral";
+export type EducationLevel = "school" | "college" | "university";
+export type ExamKind = "ent" | "ielts";
 
 export type QuestionType =
   | "single_choice"
@@ -14,8 +17,11 @@ export interface User {
   id: number;
   role: UserRole;
   email: string;
+  full_name?: string | null;
   username: string;
   preferred_language?: Language | null;
+  education_level?: EducationLevel | null;
+  direction?: string | null;
   group_id?: number | null;
 }
 
@@ -56,6 +62,21 @@ export interface Test {
   language: Language;
   mode: Mode;
   time_limit_seconds?: number | null;
+  warning_limit?: number | null;
+  exam_kind?: ExamKind | null;
+  exam_config_json?: {
+    title?: string;
+    total_questions?: number;
+    max_score?: number;
+    pass_score?: number;
+    auto_submit_on_warning?: boolean;
+    sections?: Array<{
+      code: string;
+      title: string;
+      duration_minutes?: number | null;
+      question_count: number;
+    }>;
+  } | null;
   created_at: string;
   questions: Question[];
 }
@@ -104,6 +125,7 @@ export interface HistoryItem {
   test_id: number;
   subject_id: number;
   subject_name: string;
+  exam_kind?: ExamKind | null;
   difficulty: Difficulty;
   language: Language;
   mode: Mode;
@@ -141,4 +163,64 @@ export interface GroupWeakTopics {
   group_id: number;
   group_name: string;
   weak_topics: Array<{ topic: string; count: number }>;
+}
+
+export interface TeacherGroup {
+  id: number;
+  name: string;
+  members_count: number;
+}
+
+export interface TeacherGroupMember {
+  student_id: number;
+  username: string;
+  full_name?: string | null;
+  tests_count: number;
+  avg_percent: number;
+  warnings_count: number;
+}
+
+export interface TeacherGroupMembers {
+  id: number;
+  name: string;
+  members: TeacherGroupMember[];
+}
+
+export interface TeacherInvitation {
+  id: number;
+  teacher_id: number;
+  teacher_name: string;
+  student_id: number;
+  student_username: string;
+  student_name?: string | null;
+  group_id?: number | null;
+  group_name?: string | null;
+  status: InvitationStatus;
+  created_at: string;
+  responded_at?: string | null;
+}
+
+export interface ProfileInvitation {
+  id: number;
+  teacher_id: number;
+  teacher_name: string;
+  group_id?: number | null;
+  group_name?: string | null;
+  status: InvitationStatus;
+  created_at: string;
+  responded_at?: string | null;
+}
+
+export interface ProfileData {
+  id: number;
+  role: UserRole;
+  email: string;
+  full_name?: string | null;
+  username: string;
+  preferred_language?: Language | null;
+  education_level?: EducationLevel | null;
+  direction?: string | null;
+  group_id?: number | null;
+  group_name?: string | null;
+  invitations: ProfileInvitation[];
 }

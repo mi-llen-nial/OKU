@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
-import { getHistory, getProgress, getSubjects } from "@/lib/api";
+import {
+  getStudentHistoryByTeacher,
+  getStudentProgressByTeacher,
+  getSubjects,
+} from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { HistoryItem, StudentProgress, Subject } from "@/lib/types";
 import styles from "@/app/progress/progress.module.css";
@@ -36,7 +40,13 @@ const SUBJECT_FALLBACK = [
   "Химия",
 ];
 
-export default function ProgressPage() {
+export default function TeacherStudentAnalyticsPage() {
+  const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const studentId = Number(params.id);
+  const studentName = (searchParams.get("name") || "").trim();
+  const studentTitle = studentName ? `Аналитика ученика ${studentName}` : `Аналитика ученика #${studentId}`;
+
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -45,19 +55,21 @@ export default function ProgressPage() {
 
   useEffect(() => {
     const token = getToken();
-    if (!token) return;
+    if (!token || !Number.isFinite(studentId)) return;
 
     let isCancelled = false;
-
     (async () => {
       try {
-        const [progressPayload, historyPayload] = await Promise.all([getProgress(token), getHistory(token)]);
+        const [progressPayload, historyPayload] = await Promise.all([
+          getStudentProgressByTeacher(token, studentId),
+          getStudentHistoryByTeacher(token, studentId),
+        ]);
         if (isCancelled) return;
         setProgress(progressPayload);
         setHistory(historyPayload);
       } catch (err) {
         if (!isCancelled) {
-          setError(err instanceof Error ? err.message : "Не удалось загрузить аналитику");
+          setError(err instanceof Error ? err.message : "Не удалось загрузить аналитику ученика");
         }
       } finally {
         if (!isCancelled) {
@@ -71,14 +83,14 @@ export default function ProgressPage() {
           setSubjects(subjectsPayload);
         }
       } catch (err) {
-        console.warn("Не удалось загрузить список предметов для аналитики:", err);
+        console.warn("Не удалось загрузить список предметов:", err);
       }
     })();
 
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [studentId]);
 
   const sortedByPercent = useMemo(
     () => history.slice().sort((left, right) => right.percent - left.percent),
@@ -247,7 +259,7 @@ export default function ProgressPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "oku-analytics.csv";
+    link.download = `student-${studentId}-analytics.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -256,10 +268,10 @@ export default function ProgressPage() {
 
   if (loading) {
     return (
-      <AuthGuard roles={["student"]}>
+      <AuthGuard roles={["teacher"]}>
         <AppShell>
           <div className={styles.page}>
-            <Card title="Аналитика">Загрузка...</Card>
+            <p className="muted">Загрузка...</p>
           </div>
         </AppShell>
       </AuthGuard>
@@ -267,14 +279,16 @@ export default function ProgressPage() {
   }
 
   return (
-    <AuthGuard roles={["student"]}>
+    <AuthGuard roles={["teacher"]}>
       <AppShell>
         <div className={styles.page}>
           <section className={`${styles.section} ${styles.primarySection}`}>
             <div className={styles.sectionHeaderCentered}>
-              <h2 className={styles.sectionTitle}>Аналитика</h2>
-              <p className={styles.sectionSubtitle}>Краткий пересказ вашего текущего прогресса</p>
+              <h2 className={styles.sectionTitle}>{studentTitle}</h2>
+              <p className={styles.sectionSubtitle}>Краткий пересказ текущего прогресса</p>
             </div>
+
+            {error && <div className="errorText">{error}</div>}
 
             <div className={styles.metricsGrid}>
               {metrics.map((item) => (
@@ -290,10 +304,8 @@ export default function ProgressPage() {
           <section className={styles.section}>
             <div className={styles.sectionHeaderCentered}>
               <h2 className={styles.sectionTitle}>По предметам</h2>
-              <p className={styles.sectionSubtitle}>Ваша статистика по отдельным предметам</p>
+              <p className={styles.sectionSubtitle}>Статистика ученика по отдельным предметам</p>
             </div>
-
-            {error && <div className="errorText">{error}</div>}
 
             <div className={styles.subjectGrid}>
               {subjectMetrics.map((item) => (
@@ -314,8 +326,6 @@ export default function ProgressPage() {
               </Button>
             </div>
           </section>
-
-          <footer className={styles.footer}>OKU.com</footer>
         </div>
       </AppShell>
     </AuthGuard>
@@ -372,5 +382,5 @@ function parseDateKey(value: string): Date | null {
 }
 
 function toCsvCell(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
+  return `"${value.replace(/"/g, "\"\"")}"`;
 }

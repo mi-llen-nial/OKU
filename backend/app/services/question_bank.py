@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.models import DifficultyLevel, PreferredLanguage
@@ -486,6 +487,272 @@ SUBJECT_ALIASES: dict[str, str] = {
     "агылшынтили": "английский язык",
 }
 
+MIN_TEMPLATES_PER_LEVEL = 25
+SYNTHETIC_TEMPLATES_PER_LEVEL = 30
+
+SUBJECT_TOPIC_POOL: dict[str, dict[str, list[str]]] = {
+    "математика": {
+        "ru": [
+            "Арифметика",
+            "Рациональные числа",
+            "Пропорции",
+            "Проценты",
+            "Линейные уравнения",
+            "Системы уравнений",
+            "Функции",
+            "Графики",
+            "Текстовые задачи",
+            "Статистика",
+        ],
+        "kz": [
+            "Арифметика",
+            "Рационал сандар",
+            "Пропорциялар",
+            "Пайыздар",
+            "Сызықтық теңдеулер",
+            "Теңдеулер жүйесі",
+            "Функциялар",
+            "Графиктер",
+            "Мәтіндік есептер",
+            "Статистика",
+        ],
+    },
+    "алгебра": {
+        "ru": [
+            "Степени",
+            "Корни",
+            "Многочлены",
+            "Формулы сокращенного умножения",
+            "Квадратные уравнения",
+            "Неравенства",
+            "Прогрессии",
+            "Показательные функции",
+            "Логарифмы",
+            "Параметры",
+        ],
+        "kz": [
+            "Дәрежелер",
+            "Түбірлер",
+            "Көпмүшелер",
+            "Қысқаша көбейту формулалары",
+            "Квадрат теңдеулер",
+            "Теңсіздіктер",
+            "Прогрессиялар",
+            "Көрсеткіштік функциялар",
+            "Логарифмдер",
+            "Параметрлер",
+        ],
+    },
+    "геометрия": {
+        "ru": [
+            "Треугольники",
+            "Четырехугольники",
+            "Окружность",
+            "Площади фигур",
+            "Подобие",
+            "Теорема Пифагора",
+            "Углы",
+            "Векторы",
+            "Стереометрия",
+            "Координатная геометрия",
+        ],
+        "kz": [
+            "Үшбұрыштар",
+            "Төртбұрыштар",
+            "Шеңбер",
+            "Фигура аудандары",
+            "Ұқсастық",
+            "Пифагор теоремасы",
+            "Бұрыштар",
+            "Векторлар",
+            "Стереометрия",
+            "Координаталық геометрия",
+        ],
+    },
+    "физика": {
+        "ru": [
+            "Кинематика",
+            "Динамика",
+            "Законы Ньютона",
+            "Импульс",
+            "Энергия",
+            "Термодинамика",
+            "Электричество",
+            "Магнетизм",
+            "Оптика",
+            "Колебания и волны",
+        ],
+        "kz": [
+            "Кинематика",
+            "Динамика",
+            "Ньютон заңдары",
+            "Импульс",
+            "Энергия",
+            "Термодинамика",
+            "Электр",
+            "Магнетизм",
+            "Оптика",
+            "Тербелістер мен толқындар",
+        ],
+    },
+    "русский язык": {
+        "ru": [
+            "Орфография",
+            "Пунктуация",
+            "Синтаксис",
+            "Морфология",
+            "Лексика",
+            "Стили речи",
+            "Типы текста",
+            "Средства выразительности",
+            "Словообразование",
+            "Культура речи",
+        ],
+        "kz": [
+            "Орфография",
+            "Пунктуация",
+            "Синтаксис",
+            "Морфология",
+            "Лексика",
+            "Сөйлеу стильдері",
+            "Мәтін түрлері",
+            "Көркемдеу құралдары",
+            "Сөзжасам",
+            "Сөйлеу мәдениеті",
+        ],
+    },
+    "английский язык": {
+        "ru": [
+            "Present Simple",
+            "Past Simple",
+            "Present Perfect",
+            "Modal verbs",
+            "Passive voice",
+            "Vocabulary",
+            "Reading comprehension",
+            "Word formation",
+            "Conditionals",
+            "Linking words",
+        ],
+        "kz": [
+            "Present Simple",
+            "Past Simple",
+            "Present Perfect",
+            "Modal verbs",
+            "Passive voice",
+            "Сөздік қор",
+            "Оқылым",
+            "Сөзжасам",
+            "Conditionals",
+            "Linking words",
+        ],
+    },
+    "биология": {
+        "ru": [
+            "Клетка",
+            "Генетика",
+            "Эволюция",
+            "Экология",
+            "Физиология человека",
+            "Ботаника",
+            "Зоология",
+            "Биохимия",
+            "Иммунитет",
+            "Микробиология",
+        ],
+        "kz": [
+            "Жасуша",
+            "Генетика",
+            "Эволюция",
+            "Экология",
+            "Адам физиологиясы",
+            "Ботаника",
+            "Зоология",
+            "Биохимия",
+            "Иммунитет",
+            "Микробиология",
+        ],
+    },
+    "информатика": {
+        "ru": [
+            "Алгоритмы",
+            "Структуры данных",
+            "Системы счисления",
+            "Логические операции",
+            "Компьютерные сети",
+            "Базы данных",
+            "Программирование",
+            "Кибербезопасность",
+            "Операционные системы",
+            "Файловые форматы",
+        ],
+        "kz": [
+            "Алгоритмдер",
+            "Деректер құрылымы",
+            "Санау жүйелері",
+            "Логикалық амалдар",
+            "Компьютерлік желілер",
+            "Дерекқор",
+            "Бағдарламалау",
+            "Киберқауіпсіздік",
+            "Операциялық жүйелер",
+            "Файл форматтары",
+        ],
+    },
+    "химия": {
+        "ru": [
+            "Периодическая система",
+            "Строение атома",
+            "Химическая связь",
+            "Кислоты и основания",
+            "Окислительно-восстановительные реакции",
+            "Растворы",
+            "Органическая химия",
+            "Неорганическая химия",
+            "Скорость реакции",
+            "Химическое равновесие",
+        ],
+        "kz": [
+            "Периодтық жүйе",
+            "Атом құрылысы",
+            "Химиялық байланыс",
+            "Қышқылдар мен негіздер",
+            "Тотығу-тотықсыздану реакциялары",
+            "Ерітінділер",
+            "Органикалық химия",
+            "Бейорганикалық химия",
+            "Реакция жылдамдығы",
+            "Химиялық тепе-теңдік",
+        ],
+    },
+    "история": {
+        "ru": [
+            "Древние цивилизации",
+            "Средневековье",
+            "Новая история",
+            "Индустриализация",
+            "Мировые войны",
+            "Международные отношения",
+            "Реформы и революции",
+            "Колониализм",
+            "Исторические источники",
+            "Причины и последствия событий",
+        ],
+        "kz": [
+            "Ежелгі өркениеттер",
+            "Орта ғасырлар",
+            "Жаңа заман тарихы",
+            "Индустрияландыру",
+            "Дүниежүзілік соғыстар",
+            "Халықаралық қатынастар",
+            "Реформалар мен революциялар",
+            "Отаршылдық",
+            "Тарихи дереккөздер",
+            "Оқиғалардың себеп-салдары",
+        ],
+    },
+}
+
 
 def _normalize_subject_key(value: str) -> str:
     return " ".join(value.strip().lower().replace("ё", "е").split())
@@ -504,6 +771,893 @@ def _resolve_subject_key(subject_name_ru: str) -> str:
     return normalized
 
 
+def _template_prompt_key(prompt: str) -> str:
+    normalized = re.sub(r"\s+", " ", str(prompt).strip().lower())
+    normalized = re.sub(r"[.!?…]+$", "", normalized).strip()
+    return normalized
+
+
+def _topic_keywords(topic: str, language: PreferredLanguage) -> list[str]:
+    tokens = [token for token in re.findall(r"[a-zA-Zа-яА-ЯәіңғүұқөһӘІҢҒҮҰҚӨҺ0-9]+", topic.lower()) if len(token) >= 3]
+    output: list[str] = []
+    for token in tokens:
+        if token in output:
+            continue
+        output.append(token)
+        if len(output) >= 3:
+            break
+    fallback = "пример" if language == PreferredLanguage.ru else "мысал"
+    if fallback not in output:
+        output.append(fallback)
+    return output[:4]
+
+
+def _subject_topics(subject_key: str, language: PreferredLanguage) -> list[str]:
+    lang_key = "ru" if language == PreferredLanguage.ru else "kz"
+    pool = SUBJECT_TOPIC_POOL.get(subject_key)
+    if pool and pool.get(lang_key):
+        return list(pool[lang_key])
+
+    if language == PreferredLanguage.ru:
+        return ["Базовая теория", "Практика", "Анализ", "Терминология", "Применение"]
+    return ["Негізгі теория", "Практика", "Талдау", "Терминология", "Қолдану"]
+
+
+def _fact(
+    *,
+    topic_ru: str,
+    prompt_ru: str,
+    options_ru: list[str],
+    correct_option_id: int,
+    explanation_ru: str,
+    topic_kz: str | None = None,
+    prompt_kz: str | None = None,
+    options_kz: list[str] | None = None,
+    explanation_kz: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "topic_ru": topic_ru,
+        "topic_kz": topic_kz or topic_ru,
+        "prompt_ru": prompt_ru,
+        "prompt_kz": prompt_kz or prompt_ru,
+        "options_ru": list(options_ru),
+        "options_kz": list(options_kz or options_ru),
+        "correct_option_ids": [correct_option_id],
+        "explanation_ru": explanation_ru,
+        "explanation_kz": explanation_kz or explanation_ru,
+    }
+
+
+SUBJECT_FACT_BANK: dict[str, list[dict[str, Any]]] = {
+    "математика": [
+        _fact(
+            topic_ru="Квадратные уравнения",
+            prompt_ru="Какая формула дискриминанта квадратного уравнения ax^2 + bx + c = 0?",
+            options_ru=["D = b^2 - 4ac", "D = b^2 + 4ac", "D = 2b - 4ac", "D = a^2 - 4bc"],
+            correct_option_id=0,
+            explanation_ru="Для квадратного уравнения используется формула D = b^2 - 4ac.",
+        ),
+        _fact(
+            topic_ru="Квадратные уравнения",
+            prompt_ru="Сколько действительных корней у квадратного уравнения при D < 0?",
+            options_ru=["Два", "Один", "Нет действительных корней", "Зависит от коэффициента a"],
+            correct_option_id=2,
+            explanation_ru="Если дискриминант меньше нуля, действительных корней нет.",
+        ),
+        _fact(
+            topic_ru="Линейные уравнения",
+            prompt_ru="Решите уравнение: 2x - 7 = 9",
+            options_ru=["x = 7", "x = 8", "x = 9", "x = 16"],
+            correct_option_id=1,
+            explanation_ru="2x = 16, значит x = 8.",
+        ),
+        _fact(
+            topic_ru="Проценты",
+            prompt_ru="Чему равны 25% от числа 200?",
+            options_ru=["25", "40", "50", "80"],
+            correct_option_id=2,
+            explanation_ru="25% от 200 = 200 * 0.25 = 50.",
+        ),
+        _fact(
+            topic_ru="Геометрия",
+            prompt_ru="Чему равна сумма внутренних углов треугольника?",
+            options_ru=["90°", "120°", "180°", "360°"],
+            correct_option_id=2,
+            explanation_ru="Сумма внутренних углов любого треугольника равна 180°.",
+        ),
+        _fact(
+            topic_ru="Площади фигур",
+            prompt_ru="Найдите площадь прямоугольника со сторонами 8 и 5.",
+            options_ru=["13", "40", "26", "80"],
+            correct_option_id=1,
+            explanation_ru="Площадь прямоугольника: S = a * b = 8 * 5 = 40.",
+        ),
+        _fact(
+            topic_ru="Периметр",
+            prompt_ru="Найдите периметр квадрата со стороной 6.",
+            options_ru=["12", "18", "24", "36"],
+            correct_option_id=2,
+            explanation_ru="Периметр квадрата равен 4a, значит 4 * 6 = 24.",
+        ),
+        _fact(
+            topic_ru="Среднее арифметическое",
+            prompt_ru="Найдите среднее арифметическое чисел 4, 6 и 10.",
+            options_ru=["6", "6.5", "7", "8"],
+            correct_option_id=1,
+            explanation_ru="(4 + 6 + 10) / 3 = 20 / 3 ≈ 6.67, ближайший вариант 6.5.",
+        ),
+        _fact(
+            topic_ru="Дроби и проценты",
+            prompt_ru="Какой процент составляет дробь 3/4?",
+            options_ru=["60%", "70%", "75%", "80%"],
+            correct_option_id=2,
+            explanation_ru="3/4 = 0.75, то есть 75%.",
+        ),
+    ],
+    "алгебра": [
+        _fact(
+            topic_ru="Степени",
+            prompt_ru="Чему равно выражение a^m * a^n?",
+            options_ru=["a^(m+n)", "a^(m-n)", "a^(mn)", "a^(m/n)"],
+            correct_option_id=0,
+            explanation_ru="При умножении степеней с одинаковым основанием показатели складываются.",
+        ),
+        _fact(
+            topic_ru="Степени",
+            prompt_ru="Чему равно выражение (a^m)^n?",
+            options_ru=["a^(m+n)", "a^(mn)", "a^(m-n)", "a^(m/n)"],
+            correct_option_id=1,
+            explanation_ru="При возведении степени в степень показатели перемножаются.",
+        ),
+        _fact(
+            topic_ru="Степени",
+            prompt_ru="Чему равно выражение a^m / a^n (a ≠ 0)?",
+            options_ru=["a^(m+n)", "a^(m-n)", "a^(n-m)", "a^(mn)"],
+            correct_option_id=1,
+            explanation_ru="При делении степеней с одинаковым основанием показатели вычитаются.",
+        ),
+        _fact(
+            topic_ru="Многочлены",
+            prompt_ru="Разложите на множители: x^2 - 9",
+            options_ru=["(x-3)(x+3)", "(x-9)(x+1)", "(x-3)^2", "(x+9)(x-1)"],
+            correct_option_id=0,
+            explanation_ru="Это разность квадратов: x^2 - 9 = (x-3)(x+3).",
+        ),
+        _fact(
+            topic_ru="Линейные уравнения",
+            prompt_ru="Решите уравнение: 3x + 2 = 11",
+            options_ru=["x = 2", "x = 3", "x = 4", "x = 5"],
+            correct_option_id=1,
+            explanation_ru="3x = 9, значит x = 3.",
+        ),
+        _fact(
+            topic_ru="Квадратные уравнения",
+            prompt_ru="Какие корни имеет уравнение x^2 - 5x + 6 = 0?",
+            options_ru=["2 и 3", "1 и 6", "-2 и -3", "3 и 6"],
+            correct_option_id=0,
+            explanation_ru="x^2 - 5x + 6 = (x-2)(x-3), корни 2 и 3.",
+        ),
+        _fact(
+            topic_ru="Неравенства",
+            prompt_ru="Как меняется знак неравенства при умножении на отрицательное число?",
+            options_ru=["Не меняется", "Меняется на противоположный", "Становится равенством", "Всегда становится >"],
+            correct_option_id=1,
+            explanation_ru="При умножении/делении на отрицательное число знак неравенства меняется.",
+        ),
+        _fact(
+            topic_ru="Степени",
+            prompt_ru="Чему равно 2^5?",
+            options_ru=["16", "24", "32", "64"],
+            correct_option_id=2,
+            explanation_ru="2^5 = 32.",
+        ),
+        _fact(
+            topic_ru="Логарифмы",
+            prompt_ru="Чему равен log10(100)?",
+            options_ru=["1", "2", "10", "100"],
+            correct_option_id=1,
+            explanation_ru="10^2 = 100, поэтому log10(100) = 2.",
+        ),
+    ],
+    "геометрия": [
+        _fact(
+            topic_ru="Теорема Пифагора",
+            prompt_ru="Какая формула верна для прямоугольного треугольника?",
+            options_ru=["a^2 + b^2 = c^2", "a + b = c^2", "a^2 - b^2 = c^2", "2ab = c^2"],
+            correct_option_id=0,
+            explanation_ru="В прямоугольном треугольнике сумма квадратов катетов равна квадрату гипотенузы.",
+        ),
+        _fact(
+            topic_ru="Площадь круга",
+            prompt_ru="Выберите формулу площади круга радиуса r.",
+            options_ru=["S = 2πr", "S = πr^2", "S = πd", "S = r^2/π"],
+            correct_option_id=1,
+            explanation_ru="Площадь круга равна πr^2.",
+        ),
+        _fact(
+            topic_ru="Длина окружности",
+            prompt_ru="Выберите формулу длины окружности радиуса r.",
+            options_ru=["L = 2πr", "L = πr^2", "L = r^2", "L = π/2r"],
+            correct_option_id=0,
+            explanation_ru="Длина окружности вычисляется по формуле L = 2πr.",
+        ),
+        _fact(
+            topic_ru="Многоугольники",
+            prompt_ru="Чему равна сумма внутренних углов выпуклого четырехугольника?",
+            options_ru=["180°", "270°", "360°", "540°"],
+            correct_option_id=2,
+            explanation_ru="Сумма углов четырехугольника равна 360°.",
+        ),
+        _fact(
+            topic_ru="Площадь треугольника",
+            prompt_ru="Какая формула площади треугольника?",
+            options_ru=["S = a*h", "S = a+b+c", "S = a*b/2", "S = (a*h)/2"],
+            correct_option_id=3,
+            explanation_ru="Площадь треугольника: S = (a*h)/2.",
+        ),
+        _fact(
+            topic_ru="Объемы",
+            prompt_ru="Как вычисляется объем куба со стороной a?",
+            options_ru=["V = 3a", "V = a^2", "V = a^3", "V = 6a^2"],
+            correct_option_id=2,
+            explanation_ru="Объем куба: V = a^3.",
+        ),
+        _fact(
+            topic_ru="Прямоугольник",
+            prompt_ru="Чему равна диагональ прямоугольника со сторонами 3 и 4?",
+            options_ru=["5", "6", "7", "8"],
+            correct_option_id=0,
+            explanation_ru="По теореме Пифагора: d = sqrt(3^2+4^2) = 5.",
+        ),
+        _fact(
+            topic_ru="Равнобедренный треугольник",
+            prompt_ru="Какое свойство верно для углов при основании равнобедренного треугольника?",
+            options_ru=["Они всегда прямые", "Они равны", "Их сумма всегда 60°", "Они всегда острые"],
+            correct_option_id=1,
+            explanation_ru="В равнобедренном треугольнике углы при основании равны.",
+        ),
+        _fact(
+            topic_ru="Углы",
+            prompt_ru="Внешний угол треугольника равен...",
+            options_ru=[
+                "сумме двух внутренних углов, не смежных с ним",
+                "половине внутреннего угла",
+                "сумме всех трех внутренних углов",
+                "разности смежных углов",
+            ],
+            correct_option_id=0,
+            explanation_ru="Внешний угол равен сумме двух удаленных внутренних углов.",
+        ),
+    ],
+    "физика": [
+        _fact(
+            topic_ru="Динамика",
+            prompt_ru="Как записывается второй закон Ньютона?",
+            options_ru=["F = ma", "F = mv", "F = mg", "F = p/t"],
+            correct_option_id=0,
+            explanation_ru="Сила равна произведению массы на ускорение.",
+        ),
+        _fact(
+            topic_ru="Кинематика",
+            prompt_ru="Какая формула скорости при равномерном движении?",
+            options_ru=["v = s/t", "v = at", "v = s*t", "v = t/s"],
+            correct_option_id=0,
+            explanation_ru="Скорость равна отношению пути ко времени.",
+        ),
+        _fact(
+            topic_ru="Плотность",
+            prompt_ru="Какая формула плотности вещества?",
+            options_ru=["ρ = V/m", "ρ = m/V", "ρ = m*g", "ρ = F/S"],
+            correct_option_id=1,
+            explanation_ru="Плотность определяется как масса, деленная на объем.",
+        ),
+        _fact(
+            topic_ru="Работа",
+            prompt_ru="Какая формула механической работы при постоянной силе вдоль перемещения?",
+            options_ru=["A = F/s", "A = F*s", "A = m*v", "A = U*I"],
+            correct_option_id=1,
+            explanation_ru="Работа равна произведению силы на путь.",
+        ),
+        _fact(
+            topic_ru="Электричество",
+            prompt_ru="Как записывается закон Ома для участка цепи?",
+            options_ru=["I = U/R", "I = U*R", "R = U*I", "U = I/R"],
+            correct_option_id=0,
+            explanation_ru="Сила тока равна напряжению, деленному на сопротивление.",
+        ),
+        _fact(
+            topic_ru="Сила тяжести",
+            prompt_ru="Какая формула силы тяжести у поверхности Земли?",
+            options_ru=["F = mg", "F = ma", "F = m/v", "F = pV"],
+            correct_option_id=0,
+            explanation_ru="Сила тяжести вычисляется по формуле F = mg.",
+        ),
+        _fact(
+            topic_ru="Мощность",
+            prompt_ru="Какая формула мощности через работу и время?",
+            options_ru=["P = A/t", "P = A*t", "P = F/t", "P = U/R"],
+            correct_option_id=0,
+            explanation_ru="Мощность — это работа, выполненная за единицу времени.",
+        ),
+        _fact(
+            topic_ru="Давление",
+            prompt_ru="Какая формула давления?",
+            options_ru=["p = F*S", "p = F/S", "p = m/V", "p = U*I"],
+            correct_option_id=1,
+            explanation_ru="Давление равно силе, деленной на площадь поверхности.",
+        ),
+        _fact(
+            topic_ru="Единицы СИ",
+            prompt_ru="Какая единица силы в системе СИ?",
+            options_ru=["Паскаль", "Джоуль", "Ньютон", "Ватт"],
+            correct_option_id=2,
+            explanation_ru="Единица силы в СИ — ньютон.",
+        ),
+    ],
+    "русский язык": [
+        _fact(
+            topic_ru="Орфография",
+            prompt_ru="В каком слове после буквы Ц пишется И?",
+            options_ru=["ц..рк", "ц..фра", "ц..пленок", "ц..гейка"],
+            correct_option_id=1,
+            explanation_ru="В слове «цифра» после Ц пишется И.",
+        ),
+        _fact(
+            topic_ru="Пунктуация",
+            prompt_ru="В каком предложении нужна запятая перед союзом «а»?",
+            options_ru=[
+                "Я открыл окно а потом вышел.",
+                "Я открыл окно и потом вышел.",
+                "Я открыл окно потому что было жарко.",
+                "Я открыл окно чтобы проветрить комнату.",
+            ],
+            correct_option_id=0,
+            explanation_ru="В сложносочиненном предложении перед союзом «а» ставится запятая.",
+        ),
+        _fact(
+            topic_ru="Правописание НЕ",
+            prompt_ru="Как правильно написать: (не) был дома?",
+            options_ru=["небыл", "не был", "ни был", "не-был"],
+            correct_option_id=1,
+            explanation_ru="С глаголами частица «не» пишется раздельно: «не был».",
+        ),
+        _fact(
+            topic_ru="Морфология",
+            prompt_ru="Какая часть речи у слова «быстро» в предложении «Он быстро ответил»?",
+            options_ru=["Имя прилагательное", "Наречие", "Существительное", "Глагол"],
+            correct_option_id=1,
+            explanation_ru="Слово «быстро» обозначает признак действия, это наречие.",
+        ),
+        _fact(
+            topic_ru="Лексика",
+            prompt_ru="Выберите антоним к слову «смелый».",
+            options_ru=["Отважный", "Решительный", "Трусливый", "Сильный"],
+            correct_option_id=2,
+            explanation_ru="Антоним к слову «смелый» — «трусливый».",
+        ),
+        _fact(
+            topic_ru="Лексика",
+            prompt_ru="Выберите синоним к слову «красивый».",
+            options_ru=["Прекрасный", "Грубый", "Тяжелый", "Тусклый"],
+            correct_option_id=0,
+            explanation_ru="Синоним «красивый» — «прекрасный».",
+        ),
+        _fact(
+            topic_ru="Словоизменение",
+            prompt_ru="Выберите правильную форму множественного числа слова «учитель».",
+            options_ru=["учителЯ", "учители", "учительа", "учительы"],
+            correct_option_id=0,
+            explanation_ru="Нормативная форма: «учителя».",
+        ),
+        _fact(
+            topic_ru="Орфография",
+            prompt_ru="В каком слове на конце пишется мягкий знак?",
+            options_ru=["бережеш", "бережешь", "бережошь", "берегешь"],
+            correct_option_id=1,
+            explanation_ru="Во 2-м лице ед. числа глагола пишется мягкий знак: «бережешь».",
+        ),
+        _fact(
+            topic_ru="Синтаксис",
+            prompt_ru="В каком предложении нужно поставить запятую перед «когда»?",
+            options_ru=[
+                "Мы пошли домой когда начался дождь.",
+                "Когда начался дождь мы пошли домой.",
+                "Дождь когда начался мы побежали.",
+                "Мы когда пошли домой дождь начался.",
+            ],
+            correct_option_id=0,
+            explanation_ru="«Когда» вводит придаточное, части сложного предложения отделяются запятой.",
+        ),
+    ],
+    "английский язык": [
+        _fact(
+            topic_ru="Grammar",
+            prompt_ru="Choose the correct form: She ___ to school every day.",
+            options_ru=["go", "goes", "going", "is go"],
+            correct_option_id=1,
+            explanation_ru="With he/she/it in Present Simple we use verb + s: goes.",
+        ),
+        _fact(
+            topic_ru="Tenses",
+            prompt_ru="Choose the Past Simple form of the verb 'go'.",
+            options_ru=["goed", "went", "gone", "goes"],
+            correct_option_id=1,
+            explanation_ru="The irregular Past Simple form of 'go' is 'went'.",
+        ),
+        _fact(
+            topic_ru="Articles",
+            prompt_ru="Choose the correct article: ___ apple",
+            options_ru=["a", "an", "the", "no article"],
+            correct_option_id=1,
+            explanation_ru="Before a vowel sound we use the article 'an'.",
+        ),
+        _fact(
+            topic_ru="Vocabulary",
+            prompt_ru="Choose the correct plural form of 'child'.",
+            options_ru=["childs", "children", "childes", "childrens"],
+            correct_option_id=1,
+            explanation_ru="The irregular plural form is 'children'.",
+        ),
+        _fact(
+            topic_ru="Grammar",
+            prompt_ru="Choose the correct form: He ___ a new car.",
+            options_ru=["have", "has", "having", "is have"],
+            correct_option_id=1,
+            explanation_ru="For he/she/it we use 'has'.",
+        ),
+        _fact(
+            topic_ru="Tenses",
+            prompt_ru="Choose the correct form: They ___ football now.",
+            options_ru=["play", "plays", "are playing", "played"],
+            correct_option_id=2,
+            explanation_ru="The marker 'now' indicates Present Continuous: are playing.",
+        ),
+        _fact(
+            topic_ru="Comparatives",
+            prompt_ru="Choose the comparative form of 'good'.",
+            options_ru=["gooder", "more good", "better", "best"],
+            correct_option_id=2,
+            explanation_ru="The comparative form of 'good' is 'better'.",
+        ),
+        _fact(
+            topic_ru="Prepositions",
+            prompt_ru="Choose the correct preposition: ___ Monday",
+            options_ru=["in", "at", "on", "to"],
+            correct_option_id=2,
+            explanation_ru="We use 'on' with days of the week.",
+        ),
+        _fact(
+            topic_ru="Modal verbs",
+            prompt_ru="Choose the modal verb for ability: I ___ swim.",
+            options_ru=["must", "can", "should", "may"],
+            correct_option_id=1,
+            explanation_ru="We use 'can' to express ability.",
+        ),
+    ],
+    "биология": [
+        _fact(
+            topic_ru="Клетка",
+            prompt_ru="Какая органелла отвечает за синтез АТФ в клетке?",
+            options_ru=["Ядро", "Рибосома", "Митохондрия", "Комплекс Гольджи"],
+            correct_option_id=2,
+            explanation_ru="Основной синтез АТФ в эукариотической клетке идет в митохондриях.",
+        ),
+        _fact(
+            topic_ru="Ботаника",
+            prompt_ru="В какой органелле растительной клетки происходит фотосинтез?",
+            options_ru=["Ядро", "Хлоропласт", "Лизосома", "Вакуоль"],
+            correct_option_id=1,
+            explanation_ru="Фотосинтез происходит в хлоропластах.",
+        ),
+        _fact(
+            topic_ru="Генетика",
+            prompt_ru="Где в эукариотической клетке в основном хранится ДНК?",
+            options_ru=["В цитоплазме", "В ядре", "В мембране", "В рибосоме"],
+            correct_option_id=1,
+            explanation_ru="Большая часть ДНК находится в ядре клетки.",
+        ),
+        _fact(
+            topic_ru="Физиология человека",
+            prompt_ru="Какие клетки крови переносят кислород?",
+            options_ru=["Лейкоциты", "Тромбоциты", "Эритроциты", "Макрофаги"],
+            correct_option_id=2,
+            explanation_ru="Кислород переносится гемоглобином в эритроцитах.",
+        ),
+        _fact(
+            topic_ru="Генетика человека",
+            prompt_ru="Сколько хромосом у человека в соматической клетке?",
+            options_ru=["23", "44", "46", "48"],
+            correct_option_id=2,
+            explanation_ru="У человека 46 хромосом в соматической клетке (23 пары).",
+        ),
+        _fact(
+            topic_ru="Клеточное деление",
+            prompt_ru="Как называется деление клетки, обеспечивающее рост и обновление тканей?",
+            options_ru=["Мейоз", "Митоз", "Бинарное деление", "Спорообразование"],
+            correct_option_id=1,
+            explanation_ru="Рост и регенерация тканей идут за счет митоза.",
+        ),
+        _fact(
+            topic_ru="Экология",
+            prompt_ru="Кто является продуцентами в экосистеме?",
+            options_ru=["Животные", "Грибы", "Растения", "Бактерии-разрушители"],
+            correct_option_id=2,
+            explanation_ru="Продуценты синтезируют органические вещества, обычно это зеленые растения.",
+        ),
+        _fact(
+            topic_ru="Эндокринная система",
+            prompt_ru="Какой гормон снижает уровень глюкозы в крови?",
+            options_ru=["Адреналин", "Инсулин", "Тироксин", "Кортизол"],
+            correct_option_id=1,
+            explanation_ru="Инсулин способствует снижению уровня глюкозы.",
+        ),
+        _fact(
+            topic_ru="Выделительная система",
+            prompt_ru="Какой орган фильтрует кровь и образует мочу?",
+            options_ru=["Печень", "Легкие", "Почки", "Поджелудочная железа"],
+            correct_option_id=2,
+            explanation_ru="Почки фильтруют кровь и формируют мочу.",
+        ),
+    ],
+    "информатика": [
+        _fact(
+            topic_ru="Системы счисления",
+            prompt_ru="Чему равно двоичное число 1010 в десятичной системе?",
+            options_ru=["8", "10", "12", "14"],
+            correct_option_id=1,
+            explanation_ru="1010₂ = 8 + 2 = 10.",
+        ),
+        _fact(
+            topic_ru="Единицы информации",
+            prompt_ru="Сколько бит в одном байте?",
+            options_ru=["4", "8", "16", "32"],
+            correct_option_id=1,
+            explanation_ru="1 байт = 8 бит.",
+        ),
+        _fact(
+            topic_ru="Алгоритмы",
+            prompt_ru="Какой алгоритм поиска применяют для отсортированного массива?",
+            options_ru=["Линейный поиск", "Бинарный поиск", "Поиск в глубину", "Жадный алгоритм"],
+            correct_option_id=1,
+            explanation_ru="Бинарный поиск требует отсортированного массива.",
+        ),
+        _fact(
+            topic_ru="Логика",
+            prompt_ru="Каков результат логической операции AND для 1 и 0?",
+            options_ru=["1", "0", "Зависит от порядка", "Не определен"],
+            correct_option_id=1,
+            explanation_ru="1 AND 0 = 0.",
+        ),
+        _fact(
+            topic_ru="Системы счисления",
+            prompt_ru="Как записывается число 15 в двоичной системе?",
+            options_ru=["1011", "1101", "1111", "10000"],
+            correct_option_id=2,
+            explanation_ru="15₁₀ = 1111₂.",
+        ),
+        _fact(
+            topic_ru="Архитектура ПК",
+            prompt_ru="Какая память является энергозависимой?",
+            options_ru=["SSD", "RAM", "ROM", "Flash"],
+            correct_option_id=1,
+            explanation_ru="Оперативная память (RAM) хранит данные только при наличии питания.",
+        ),
+        _fact(
+            topic_ru="Базы данных",
+            prompt_ru="Для чего обычно используется SQL?",
+            options_ru=[
+                "Для редактирования изображений",
+                "Для работы с базами данных",
+                "Для шифрования файлов",
+                "Для сборки компьютерных сетей",
+            ],
+            correct_option_id=1,
+            explanation_ru="SQL применяется для запросов и управления данными в БД.",
+        ),
+        _fact(
+            topic_ru="Сети",
+            prompt_ru="Сколько бит содержит IPv4-адрес?",
+            options_ru=["16", "32", "64", "128"],
+            correct_option_id=1,
+            explanation_ru="IPv4-адрес состоит из 32 бит.",
+        ),
+        _fact(
+            topic_ru="Файлы",
+            prompt_ru="Какое расширение обычно у простого текстового файла?",
+            options_ru=[".txt", ".exe", ".png", ".mp3"],
+            correct_option_id=0,
+            explanation_ru="Простой текстовый файл обычно имеет расширение .txt.",
+        ),
+    ],
+    "химия": [
+        _fact(
+            topic_ru="Неорганическая химия",
+            prompt_ru="Какая химическая формула воды?",
+            options_ru=["H2O", "CO2", "O2", "H2SO4"],
+            correct_option_id=0,
+            explanation_ru="Молекула воды состоит из двух атомов водорода и одного атома кислорода.",
+        ),
+        _fact(
+            topic_ru="Строение атома",
+            prompt_ru="Какой заряд имеет ядро атома натрия (Na)?",
+            options_ru=["+11", "+23", "-11", "0"],
+            correct_option_id=0,
+            explanation_ru="Заряд ядра равен числу протонов: у Na это 11.",
+        ),
+        _fact(
+            topic_ru="Растворы",
+            prompt_ru="Какой характер среды у раствора с pH = 3?",
+            options_ru=["Кислая", "Нейтральная", "Щелочная", "Буферная"],
+            correct_option_id=0,
+            explanation_ru="Растворы с pH ниже 7 имеют кислую среду.",
+        ),
+        _fact(
+            topic_ru="Органическая химия",
+            prompt_ru="Какая формула метана?",
+            options_ru=["CH4", "C2H6", "CO2", "H2"],
+            correct_option_id=0,
+            explanation_ru="Метан — самый простой алкан с формулой CH4.",
+        ),
+        _fact(
+            topic_ru="Типы реакций",
+            prompt_ru="Как называется реакция между кислотой и основанием с образованием соли и воды?",
+            options_ru=["Окисление", "Нейтрализация", "Разложение", "Полимеризация"],
+            correct_option_id=1,
+            explanation_ru="Кислота + основание -> соль + вода, это нейтрализация.",
+        ),
+        _fact(
+            topic_ru="Химическая кинетика",
+            prompt_ru="Что делает катализатор в химической реакции?",
+            options_ru=[
+                "Ускоряет реакцию и расходуется полностью",
+                "Замедляет реакцию",
+                "Ускоряет реакцию и сам практически не расходуется",
+                "Не влияет на реакцию",
+            ],
+            correct_option_id=2,
+            explanation_ru="Катализатор снижает энергию активации и ускоряет реакцию, сам не расходуется существенно.",
+        ),
+        _fact(
+            topic_ru="Химическая связь",
+            prompt_ru="Какой тип связи в соединении NaCl?",
+            options_ru=["Ковалентная неполярная", "Ковалентная полярная", "Ионная", "Металлическая"],
+            correct_option_id=2,
+            explanation_ru="Между ионами Na+ и Cl- формируется ионная связь.",
+        ),
+        _fact(
+            topic_ru="Периодическая система",
+            prompt_ru="Чему равен порядковый номер элемента в таблице Менделеева?",
+            options_ru=["Числу нейтронов", "Числу электронных слоев", "Числу протонов", "Массовому числу"],
+            correct_option_id=2,
+            explanation_ru="Порядковый номер равен числу протонов в ядре.",
+        ),
+        _fact(
+            topic_ru="Физическая химия",
+            prompt_ru="Каково значение числа Авогадро (приблизительно)?",
+            options_ru=["6.02×10^23", "3.14×10^8", "9.8×10^2", "1.6×10^-19"],
+            correct_option_id=0,
+            explanation_ru="Число Авогадро примерно равно 6.02×10^23 частиц/моль.",
+        ),
+    ],
+    "история": [
+        _fact(
+            topic_ru="Вторая мировая война",
+            prompt_ru="В каком году началась Вторая мировая война?",
+            options_ru=["1914", "1939", "1941", "1945"],
+            correct_option_id=1,
+            explanation_ru="Вторая мировая война началась в 1939 году.",
+        ),
+        _fact(
+            topic_ru="Вторая мировая война",
+            prompt_ru="В каком году завершилась Вторая мировая война?",
+            options_ru=["1943", "1944", "1945", "1946"],
+            correct_option_id=2,
+            explanation_ru="Официальное окончание Второй мировой войны — 1945 год.",
+        ),
+        _fact(
+            topic_ru="Космическая история",
+            prompt_ru="В каком году Юрий Гагарин совершил первый полет человека в космос?",
+            options_ru=["1957", "1961", "1965", "1969"],
+            correct_option_id=1,
+            explanation_ru="Первый полет человека в космос состоялся в 1961 году.",
+        ),
+        _fact(
+            topic_ru="Европейская история",
+            prompt_ru="В каком году началась Великая французская революция?",
+            options_ru=["1776", "1789", "1812", "1848"],
+            correct_option_id=1,
+            explanation_ru="Великая французская революция началась в 1789 году.",
+        ),
+        _fact(
+            topic_ru="Эпоха Великих географических открытий",
+            prompt_ru="В каком году Колумб достиг Америки?",
+            options_ru=["1453", "1492", "1517", "1600"],
+            correct_option_id=1,
+            explanation_ru="Плавание Христофора Колумба к берегам Америки датируется 1492 годом.",
+        ),
+        _fact(
+            topic_ru="Международные организации",
+            prompt_ru="В каком году была создана Организация Объединенных Наций (ООН)?",
+            options_ru=["1919", "1945", "1955", "1963"],
+            correct_option_id=1,
+            explanation_ru="ООН создана в 1945 году после Второй мировой войны.",
+        ),
+        _fact(
+            topic_ru="Холодная война",
+            prompt_ru="Падение Берлинской стены произошло в...",
+            options_ru=["1968", "1979", "1989", "1995"],
+            correct_option_id=2,
+            explanation_ru="Берлинская стена пала в 1989 году.",
+        ),
+        _fact(
+            topic_ru="История США",
+            prompt_ru="В каком году была принята Декларация независимости США?",
+            options_ru=["1776", "1787", "1815", "1861"],
+            correct_option_id=0,
+            explanation_ru="Декларация независимости США принята в 1776 году.",
+        ),
+        _fact(
+            topic_ru="Новая история",
+            prompt_ru="В какой стране началась промышленная революция?",
+            options_ru=["Франция", "Германия", "Великобритания", "США"],
+            correct_option_id=2,
+            explanation_ru="Промышленная революция началась в Великобритании.",
+        ),
+    ],
+}
+
+
+def _difficulty_prompt_forms(language: PreferredLanguage, difficulty: DifficultyLevel) -> list[str]:
+    if language == PreferredLanguage.ru:
+        if difficulty == DifficultyLevel.easy:
+            return [
+                "{question}",
+                "Выберите верный ответ. {question}",
+                "Тема «{topic}». {question}",
+            ]
+        if difficulty == DifficultyLevel.medium:
+            return [
+                "Определите правильный вариант. {question}",
+                "Примените правило по теме «{topic}». {question}",
+                "Укажите корректный ответ для учебной ситуации. {question}",
+            ]
+        return [
+            "Проанализируйте вопрос и выберите точный ответ. {question}",
+            "Тема «{topic}»: {question}",
+            "С учетом теории выберите правильный ответ. {question}",
+        ]
+
+    if difficulty == DifficultyLevel.easy:
+        return [
+            "{question}",
+            "Дұрыс жауапты таңдаңыз. {question}",
+            "«{topic}» тақырыбы. {question}",
+        ]
+    if difficulty == DifficultyLevel.medium:
+        return [
+            "Дұрыс нұсқаны анықтаңыз. {question}",
+            "«{topic}» тақырыбы бойынша ережені қолданыңыз. {question}",
+            "Оқу жағдайына сай дұрыс жауапты көрсетіңіз. {question}",
+        ]
+    return [
+        "Сұрақты талдап, ең дәл жауапты таңдаңыз. {question}",
+        "«{topic}» тақырыбы: {question}",
+        "Теорияны ескере отырып, дұрыс жауапты таңдаңыз. {question}",
+    ]
+
+
+def _fact_to_short_text_template(
+    *,
+    fact: dict[str, Any],
+    language: PreferredLanguage,
+    prompt: str,
+    base_prompt_key: str,
+) -> dict[str, Any]:
+    topic = _pick(language, ru=fact["topic_ru"], kz=fact["topic_kz"])
+    options = _pick(language, ru=fact["options_ru"], kz=fact["options_kz"])
+    correct_ids = list(fact.get("correct_option_ids", [0]))
+    correct_index = correct_ids[0] if correct_ids else 0
+    correct_index = max(0, min(correct_index, len(options) - 1))
+    answer_text = str(options[correct_index])
+    explanation = _pick(language, ru=fact["explanation_ru"], kz=fact["explanation_kz"])
+    keywords = _topic_keywords(topic, language)
+    for token in re.findall(r"[a-zA-Zа-яА-ЯәіңғүұқөһӘІҢҒҮҰҚӨҺ0-9]+", answer_text.lower()):
+        if len(token) < 3 or token in keywords:
+            continue
+        keywords.append(token)
+        if len(keywords) >= 4:
+            break
+
+    if language == PreferredLanguage.ru:
+        short_prompt = f"{prompt} Кратко объясните, почему этот ответ верный."
+    else:
+        short_prompt = f"{prompt} Неліктен бұл жауап дұрыс екенін қысқаша түсіндіріңіз."
+
+    return {
+        "type": "short_text",
+        "topic": topic,
+        "prompt": short_prompt,
+        "base_prompt_key": base_prompt_key,
+        "options": None,
+        "correct_option_ids": [],
+        "keywords": keywords[:4],
+        "sample_answer": answer_text,
+        "explanation": explanation,
+    }
+
+
+def _build_synthetic_templates(
+    *,
+    subject_key: str,
+    language: PreferredLanguage,
+    difficulty: DifficultyLevel,
+    target_count: int = SYNTHETIC_TEMPLATES_PER_LEVEL,
+) -> list[dict[str, Any]]:
+    facts = SUBJECT_FACT_BANK.get(subject_key, [])
+    if not facts:
+        return []
+
+    forms = _difficulty_prompt_forms(language, difficulty)
+    if not forms:
+        forms = ["{question}"]
+    target = max(target_count, MIN_TEMPLATES_PER_LEVEL)
+
+    output: list[dict[str, Any]] = []
+    for form_idx, form in enumerate(forms):
+        for fact_idx, fact in enumerate(facts):
+            topic = _pick(language, ru=fact["topic_ru"], kz=fact["topic_kz"])
+            prompt_base = _pick(language, ru=fact["prompt_ru"], kz=fact["prompt_kz"])
+            base_prompt_key = _template_prompt_key(prompt_base)
+            options = list(_pick(language, ru=fact["options_ru"], kz=fact["options_kz"]))
+            explanation = _pick(language, ru=fact["explanation_ru"], kz=fact["explanation_kz"])
+            prompt = form.format(topic=topic, question=prompt_base).strip()
+            prompt = re.sub(r"\s+", " ", prompt)
+
+            if difficulty == DifficultyLevel.hard and (fact_idx + form_idx) % 5 == 0:
+                output.append(
+                    _fact_to_short_text_template(
+                        fact=fact,
+                        language=language,
+                        prompt=prompt,
+                        base_prompt_key=base_prompt_key,
+                    )
+                )
+                continue
+
+            output.append(
+                {
+                    "type": "single_choice",
+                    "topic": topic,
+                    "prompt": prompt,
+                    "base_prompt_key": base_prompt_key,
+                    "options": options,
+                    "correct_option_ids": list(fact.get("correct_option_ids", [0])),
+                    "keywords": _topic_keywords(topic, language),
+                    "sample_answer": "",
+                    "explanation": explanation,
+                }
+            )
+
+            if len(output) >= target * 2:
+                break
+        if len(output) >= target * 2:
+            break
+
+    return _dedupe_templates(output)[:target]
+
+
+def _dedupe_templates(templates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for item in templates:
+        prompt_key = _template_prompt_key(str(item.get("prompt", "")))
+        if not prompt_key or prompt_key in seen_keys:
+            continue
+        seen_keys.add(prompt_key)
+        output.append(item)
+    return output
+
+
 def get_text_question_templates(
     *,
     subject_name_ru: str,
@@ -515,7 +1669,7 @@ def get_text_question_templates(
     templates = QUESTION_BANK.get(key, [])
     level = difficulty.value
 
-    selected = []
+    selected: list[dict[str, Any]] = []
     for item in templates:
         levels = [str(value) for value in item.get("levels", [])]
         if level not in levels and "all" not in levels:
@@ -532,6 +1686,19 @@ def get_text_question_templates(
                 "explanation": _pick(language, ru=item["explanation_ru"], kz=item["explanation_kz"]),
             }
         )
+
+    selected = _dedupe_templates(selected)
+
+    if len(selected) < MIN_TEMPLATES_PER_LEVEL:
+        generated = _build_synthetic_templates(
+            subject_key=key,
+            language=language,
+            difficulty=difficulty,
+            target_count=max(SYNTHETIC_TEMPLATES_PER_LEVEL, MIN_TEMPLATES_PER_LEVEL * 2),
+        )
+        if generated:
+            selected.extend(generated)
+            selected = _dedupe_templates(selected)
 
     if limit is not None:
         return selected[:limit]

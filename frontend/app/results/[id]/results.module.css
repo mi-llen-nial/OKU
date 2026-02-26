@@ -127,7 +127,7 @@
 .subjectName {
   margin: 0;
   color: #ffffff;
-  font-size: 24px;
+  font-size: 16px;
   line-height: 1;
   font-weight: 600;
 }
@@ -330,6 +330,33 @@
     gap: 80px;
   }
 
+  .sectionTitle,
+  .sectionTitleLeft,
+  .recommendationTitle,
+  .stateTitle {
+    font-size: 20px;
+  }
+
+  .sectionSubtitle,
+  .sectionSubtitleLeft,
+  .recommendationSubtitle,
+  .recommendationText,
+  .metricRow,
+  .questionText,
+  .answerText,
+  .retryButton,
+  .homeButton,
+  .fieldLabel,
+  .stateCard,
+  .footer {
+    font-size: 14px;
+  }
+
+  .taskItem,
+  .errorText {
+    font-size: 12px;
+  }
+
   .summaryGrid,
   .feedbackGrid {
     grid-template-columns: 1fr;
@@ -340,12 +367,8 @@
     padding: 22px 18px;
   }
 
-  .recommendationTitle {
-    font-size: 24px;
-  }
-
   .subjectName {
-    font-size: 24px;
+    font-size: 16px;
   }
 
   .actionsRow {

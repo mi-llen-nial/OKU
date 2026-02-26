@@ -12,9 +12,15 @@
   gap: 24px;
 }
 
-.sectionHeader {
+.primarySection {
+  gap: 32px;
+}
+
+.sectionHeaderCentered {
   display: grid;
   gap: 8px;
+  justify-items: center;
+  text-align: center;
 }
 
 .sectionTitle {
@@ -22,66 +28,183 @@
   color: var(--ink-strong);
   font-size: 24px;
   line-height: 1.2;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .sectionSubtitle {
   margin: 0;
   color: var(--ink-muted);
   font-size: 16px;
-  line-height: 1.3;
+  line-height: 1.35;
   font-weight: 350;
 }
 
-.stats {
+.metricsGrid,
+.subjectGrid {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 36px 28px;
 }
 
-.layout {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 1.2fr 0.8fr;
-}
-
-.subjectList {
-  display: grid;
-  gap: 10px;
-}
-
+.metricItem,
 .subjectItem {
-  border: none;
-  border-radius: var(--radius-md);
-  background: #ffffff;
-  padding: 12px;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  box-shadow: none;
-  transition: box-shadow 0.15s ease;
+  display: grid;
+  gap: 4px;
 }
 
-.subjectItem:hover {
-  box-shadow: var(--shadow-soft);
+.metricLabel {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 600;
 }
 
-.subjectName {
-  font-weight: 700;
-}
-
-.subjectMeta {
-  font-size: 0.9rem;
+.metricMeta {
+  margin: 0;
   color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 350;
+}
+
+.metricValue {
+  margin: 0;
+  color: var(--brand-primary);
+  font-size: 36px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.exportSection {
+  margin-top: -20px;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.exportTitle {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.exportActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exportButton {
+  min-width: 136px;
+  min-height: 38px;
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 350;
+}
+
+.footer {
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 350;
+}
+
+@media (max-width: 1100px) {
+  .metricsGrid,
+  .subjectGrid {
+    gap: 30px 20px;
+  }
 }
 
 @media (max-width: 960px) {
   .page {
-    gap: 80px;
+    gap: 64px;
   }
 
-  .stats,
-  .layout {
-    grid-template-columns: 1fr;
+  .metricsGrid,
+  .subjectGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metricValue {
+    font-size: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    gap: 56px;
+    padding-bottom: 36px;
+  }
+
+  .section {
+    gap: 20px;
+  }
+
+  .sectionHeaderCentered {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .sectionTitle,
+  .exportTitle {
+    font-size: 20px;
+  }
+
+  .sectionSubtitle {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .metricsGrid,
+  .subjectGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
+  }
+
+  .metricItem,
+  .subjectItem {
+    padding: 10px 8px;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .metricLabel {
+    font-size: 14px;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .metricMeta {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+
+  .metricValue {
+    font-size: 24px;
+    line-height: 1.1;
+  }
+
+  .exportSection {
+    justify-items: start;
+    margin-top: -8px;
+  }
+
+  .exportActions {
+    justify-content: flex-start;
+  }
+
+  .exportButton {
+    min-height: 34px;
+    min-width: 122px;
+    font-size: 14px;
   }
 }

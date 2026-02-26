@@ -1,7 +1,18 @@
 from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
+from app.schemas.groups import (
+    GroupMemberResponse,
+    GroupMembersResponse,
+    TeacherGroupCreateRequest,
+    TeacherGroupCreateResponse,
+    TeacherGroupListItem,
+    TeacherInvitationCreateRequest,
+    TeacherInvitationResponse,
+)
+from app.schemas.profile import ProfileInvitationResponse, ProfileResponse
 from app.schemas.subjects import SubjectResponse
 from app.schemas.teacher import GroupAnalyticsResponse, GroupWeakTopicsResponse
 from app.schemas.tests import (
+    GenerateExamTestRequest,
     GenerateTestRequest,
     GeneratedQuestionPayload,
     GeneratedTestPayload,
@@ -23,9 +34,19 @@ __all__ = [
     "LoginRequest",
     "RegisterRequest",
     "UserResponse",
+    "TeacherGroupListItem",
+    "TeacherGroupCreateRequest",
+    "TeacherGroupCreateResponse",
+    "GroupMemberResponse",
+    "GroupMembersResponse",
+    "TeacherInvitationCreateRequest",
+    "TeacherInvitationResponse",
+    "ProfileResponse",
+    "ProfileInvitationResponse",
     "SubjectResponse",
     "GroupAnalyticsResponse",
     "GroupWeakTopicsResponse",
+    "GenerateExamTestRequest",
     "GenerateTestRequest",
     "GeneratedQuestionPayload",
     "GeneratedTestPayload",

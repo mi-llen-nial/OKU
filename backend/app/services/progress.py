@@ -24,12 +24,20 @@ def build_student_history(db: Session, student_id: int) -> list[HistoryItemRespo
 
     history: list[HistoryItemResponse] = []
     for test, subject, result, recommendation, session in rows:
-        subject_name = subject.name_ru if test.language.value == "RU" else subject.name_kz
+        exam_kind = str(session.exam_kind).strip().lower() if session and session.exam_kind else None
+        if exam_kind == "ent":
+            subject_name = "ЕНТ"
+        elif exam_kind == "ielts":
+            subject_name = "IELTS"
+        else:
+            subject_name = subject.name_ru if test.language.value == "RU" else subject.name_kz
+
         history.append(
             HistoryItemResponse(
                 test_id=test.id,
                 subject_id=subject.id,
                 subject_name=subject_name,
+                exam_kind=exam_kind,
                 difficulty=test.difficulty,
                 language=test.language,
                 mode=test.mode,
@@ -113,7 +121,7 @@ def build_student_progress(db: Session, student_id: int) -> StudentProgressRespo
 def build_group_analytics(db: Session, group_id: int) -> GroupAnalyticsResponse:
     group = db.get(Group, group_id)
     if not group:
-        raise ValueError("Group not found")
+        raise ValueError("Группа не найдена")
 
     students = db.execute(
         select(User)
@@ -147,7 +155,7 @@ def build_group_analytics(db: Session, group_id: int) -> GroupAnalyticsResponse:
         metrics.append(
             GroupStudentMetric(
                 student_id=student.id,
-                student_name=student.username,
+                student_name=student.full_name or student.username,
                 tests_count=len(progress_rows),
                 avg_percent=round(avg_percent, 2),
                 last_percent=round(last_percent, 2) if last_percent is not None else None,
@@ -175,7 +183,7 @@ def build_group_analytics(db: Session, group_id: int) -> GroupAnalyticsResponse:
 def build_group_weak_topics(db: Session, group_id: int) -> GroupWeakTopicsResponse:
     group = db.get(Group, group_id)
     if not group:
-        raise ValueError("Group not found")
+        raise ValueError("Группа не найдена")
 
     weak_counter = Counter()
     rows = db.scalars(

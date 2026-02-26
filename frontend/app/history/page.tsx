@@ -47,7 +47,7 @@ export default function HistoryPage() {
         setHistory(historyData);
         setVisibleCount(INITIAL_VISIBLE_TESTS);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Cannot load history data"))
+      .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить историю"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -62,7 +62,8 @@ export default function HistoryPage() {
     if (history.length === 0) return "Нет данных";
     const counter = new Map<string, number>();
     for (const item of history) {
-      counter.set(item.subject_name, (counter.get(item.subject_name) || 0) + 1);
+      const title = attemptTitle(item);
+      counter.set(title, (counter.get(title) || 0) + 1);
     }
     return [...counter.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] || "Нет данных";
   }, [history]);
@@ -163,7 +164,7 @@ export default function HistoryPage() {
               <article className={styles.metricItem}>
                 <h3 className={styles.metricLabel}>Лучший результат</h3>
                 <p className={styles.metricMeta}>
-                  {bestAttempt ? `${bestAttempt.subject_name} (${difficultyLabel(bestAttempt.difficulty)})` : "Пока нет данных"}
+                  {bestAttempt ? `${attemptTitle(bestAttempt)} (${difficultyLabel(bestAttempt.difficulty)})` : "Пока нет данных"}
                 </p>
                 <p className={styles.metricValue}>{formatPercent(progress?.best_percent ?? 0)}</p>
               </article>
@@ -183,7 +184,7 @@ export default function HistoryPage() {
               <article className={styles.metricItem}>
                 <h3 className={styles.metricLabel}>Худший результат</h3>
                 <p className={styles.metricMeta}>
-                  {worstAttempt ? `${worstAttempt.subject_name} (${difficultyLabel(worstAttempt.difficulty)})` : "Пока нет данных"}
+                  {worstAttempt ? `${attemptTitle(worstAttempt)} (${difficultyLabel(worstAttempt.difficulty)})` : "Пока нет данных"}
                 </p>
                 <p className={styles.metricValue}>{worstAttempt ? formatPercent(worstAttempt.percent) : "0%"}</p>
               </article>
@@ -214,6 +215,7 @@ export default function HistoryPage() {
                 <div className={styles.attemptList}>
                   {visibleHistory.map((item) => {
                     const scoreClass = resolveScoreClass(item.percent);
+                    const title = attemptTitle(item);
 
                     return (
                       <article className={styles.attemptCard} key={item.test_id}>
@@ -228,9 +230,9 @@ export default function HistoryPage() {
                         </div>
 
                         <div className={styles.attemptBody}>
-                          <img className={styles.attemptIcon} src={resolveSubjectIcon(item.subject_name)} alt={item.subject_name} />
+                          <img className={styles.attemptIcon} src={resolveSubjectIcon(title)} alt={title} />
                           <div className={styles.attemptInfo}>
-                            <h3 className={styles.attemptTitle}>{item.subject_name}</h3>
+                            <h3 className={styles.attemptTitle}>{title}</h3>
                             <p className={styles.attemptTopics}>
                               {item.weak_topics.length > 0 ? item.weak_topics.slice(0, 3).join("   ") : "Сильное прохождение"}
                             </p>
@@ -305,6 +307,8 @@ function normalizeText(value: string): string {
 
 function resolveSubjectIcon(subjectName: string): string {
   const key = normalizeText(subjectName);
+  if (key.includes("ielts")) return assetPaths.icons.ielts;
+  if (key.includes("ент") || key.includes("ent")) return assetPaths.icons.ent;
   if (key.includes("алгебр")) return assetPaths.icons.algebra;
   if (key.includes("геометр")) return assetPaths.icons.geometry;
   if (key.includes("физик")) return assetPaths.icons.physics;
@@ -322,6 +326,12 @@ function difficultyLabel(value: HistoryItem["difficulty"]): string {
   if (value === "easy") return "Легкий";
   if (value === "hard") return "Сложный";
   return "Средний";
+}
+
+function attemptTitle(item: Pick<HistoryItem, "subject_name" | "exam_kind">): string {
+  if (item.exam_kind === "ielts") return "IELTS";
+  if (item.exam_kind === "ent") return "ЕНТ";
+  return item.subject_name;
 }
 
 function modeLabel(value: HistoryItem["mode"]): string {
@@ -355,6 +365,9 @@ function formatPercent(value: number): string {
 
 function formatSubjectTitle(value: string): string {
   if (!value || value === "Нет данных") return "Нет данных";
+  const normalized = normalizeText(value);
+  if (normalized.includes("ielts")) return "IELTS";
+  if (normalized.includes("ент") || normalized.includes("ent")) return "ЕНТ";
   return value
     .split(/\s+/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())

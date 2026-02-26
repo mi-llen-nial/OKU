@@ -27,7 +27,7 @@ class RecommendationPayload:
 
 class AIService:
     OPTION_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    LIBRARY_QUESTIONS_PER_COMBINATION = 20
+    LIBRARY_QUESTIONS_PER_COMBINATION = 25
 
     def generate_test(
         self,
@@ -130,6 +130,174 @@ class AIService:
             focus_topics=normalized_focus_topics,
         )
 
+    def generate_library_only_questions(
+        self,
+        *,
+        subject: Subject,
+        language: PreferredLanguage,
+        mode: TestMode,
+        num_questions: int,
+        seed: str,
+        difficulty_order: Sequence[DifficultyLevel] | None = None,
+        used_library_question_ids: set[str] | None = None,
+        used_library_content_keys: set[str] | None = None,
+    ) -> list[GeneratedQuestionPayload]:
+        difficulties = list(difficulty_order or [DifficultyLevel.medium, DifficultyLevel.easy, DifficultyLevel.hard])
+        normalized_difficulties: list[DifficultyLevel] = []
+        seen_difficulty: set[DifficultyLevel] = set()
+        for item in difficulties:
+            if item in seen_difficulty:
+                continue
+            seen_difficulty.add(item)
+            normalized_difficulties.append(item)
+
+        template_buckets: list[tuple[DifficultyLevel, list[dict[str, Any]]]] = []
+        for difficulty in normalized_difficulties:
+            templates = get_text_question_templates(
+                subject_name_ru=subject.name_ru,
+                language=language,
+                difficulty=difficulty,
+            )
+            if templates:
+                template_buckets.append((difficulty, templates))
+
+        if not template_buckets:
+            return []
+
+        used_ids = set(used_library_question_ids or set())
+        track_content_uniqueness = used_library_content_keys is not None
+        used_content_keys = {
+            str(value).strip().lower()
+            for value in (used_library_content_keys or set())
+            if str(value).strip()
+        }
+        rng = random.Random(seed)
+        generated_candidates: list[GeneratedQuestionPayload] = []
+        library_index = 0
+        rounds = max(4, (num_questions // max(1, sum(len(bucket) for _, bucket in template_buckets))) + 8)
+
+        for round_idx in range(rounds):
+            round_candidates: list[GeneratedQuestionPayload] = []
+            for difficulty, templates in template_buckets:
+                rotated = list(templates)
+                rng.shuffle(rotated)
+                for template in rotated:
+                    template_content_key = self._library_content_key(str(template.get("prompt", "")))
+                    if track_content_uniqueness and template_content_key and template_content_key in used_content_keys:
+                        continue
+                    prepared = dict(template)
+                    if round_idx > 0:
+                        prepared["prompt"] = self._build_library_prompt_variant(
+                            prompt=str(template.get("prompt", "")),
+                            language=language,
+                            variant_index=round_idx,
+                            salt=library_index,
+                        )
+                    question = self._build_question_from_bank_template(
+                        template=prepared,
+                        subject=subject,
+                        difficulty=difficulty,
+                        language=language,
+                        rng=rng,
+                    )
+                    adapted = self._adapt_library_question_to_mode(
+                        question=question,
+                        mode=mode,
+                        language=language,
+                    )
+                    attached = self._attach_library_metadata(
+                        question=adapted,
+                        subject=subject,
+                        difficulty=difficulty,
+                        language=language,
+                        mode=mode,
+                        library_index=library_index,
+                        template_content_key=template_content_key or None,
+                    )
+                    library_index += 1
+                    library_id = str((attached.explanation_json or {}).get("library_question_id", "")).strip()
+                    if library_id and library_id in used_ids:
+                        continue
+                    content_key = str((attached.explanation_json or {}).get("library_template_key", "")).strip().lower()
+                    if track_content_uniqueness and content_key and content_key in used_content_keys:
+                        continue
+                    if track_content_uniqueness and content_key:
+                        used_content_keys.add(content_key)
+                    round_candidates.append(attached)
+            generated_candidates.extend(round_candidates)
+            if len(generated_candidates) >= num_questions * 3:
+                break
+
+        sanitized = self._sanitize_questions(
+            questions=generated_candidates,
+            subject=subject,
+            difficulty=normalized_difficulties[0],
+            language=language,
+            mode=mode,
+            target_count=num_questions,
+            focus_topics=[],
+        )
+
+        if len(sanitized) >= num_questions:
+            return sanitized[:num_questions]
+
+        # Final deterministic top-up from template paraphrases only (still library-based).
+        fallback: list[GeneratedQuestionPayload] = list(sanitized)
+        seen_unique_keys = {self._question_uniqueness_key(item) for item in fallback}
+        extra_round = rounds
+        while len(fallback) < num_questions and extra_round < rounds + 24:
+            extra_round += 1
+            for difficulty, templates in template_buckets:
+                for template in templates:
+                    template_content_key = self._library_content_key(str(template.get("prompt", "")))
+                    if track_content_uniqueness and template_content_key and template_content_key in used_content_keys:
+                        continue
+                    prepared = dict(template)
+                    prepared["prompt"] = self._build_library_prompt_variant(
+                        prompt=str(template.get("prompt", "")),
+                        language=language,
+                        variant_index=extra_round,
+                        salt=library_index,
+                    )
+                    question = self._build_question_from_bank_template(
+                        template=prepared,
+                        subject=subject,
+                        difficulty=difficulty,
+                        language=language,
+                        rng=rng,
+                    )
+                    adapted = self._adapt_library_question_to_mode(
+                        question=question,
+                        mode=mode,
+                        language=language,
+                    )
+                    attached = self._attach_library_metadata(
+                        question=adapted,
+                        subject=subject,
+                        difficulty=difficulty,
+                        language=language,
+                        mode=mode,
+                        library_index=library_index,
+                        template_content_key=template_content_key or None,
+                    )
+                    library_index += 1
+                    key = self._question_uniqueness_key(attached)
+                    if key in seen_unique_keys:
+                        continue
+                    content_key = str((attached.explanation_json or {}).get("library_template_key", "")).strip().lower()
+                    if track_content_uniqueness and content_key and content_key in used_content_keys:
+                        continue
+                    seen_unique_keys.add(key)
+                    if track_content_uniqueness and content_key:
+                        used_content_keys.add(content_key)
+                    fallback.append(attached)
+                    if len(fallback) >= num_questions:
+                        break
+                if len(fallback) >= num_questions:
+                    break
+
+        return fallback[:num_questions]
+
     def _sample_library_questions(
         self,
         *,
@@ -145,17 +313,34 @@ class AIService:
             key=lambda item: (self._is_variant_prompt(item.prompt), rng.random()),
         )
         selected: list[GeneratedQuestionPayload] = []
-        seen_content_keys: set[str] = set()
+        seen_unique_keys: set[str] = set()
+        seen_base_keys: set[str] = set()
+        deferred: list[GeneratedQuestionPayload] = []
 
         for item in ranked:
-            explanation = item.explanation_json or {}
-            content_key = str(explanation.get("library_content_key", "")).strip() or self._library_content_key(item.prompt)
-            if content_key in seen_content_keys:
+            unique_key = self._question_uniqueness_key(item)
+            if unique_key in seen_unique_keys:
                 continue
-            seen_content_keys.add(content_key)
+            base_key = str((item.explanation_json or {}).get("library_base_key", "")).strip().lower()
+            if base_key:
+                if base_key in seen_base_keys:
+                    deferred.append(item)
+                    continue
+                seen_base_keys.add(base_key)
+            seen_unique_keys.add(unique_key)
             selected.append(item)
             if len(selected) >= limit:
                 break
+
+        if len(selected) < limit:
+            for item in deferred:
+                unique_key = self._question_uniqueness_key(item)
+                if unique_key in seen_unique_keys:
+                    continue
+                seen_unique_keys.add(unique_key)
+                selected.append(item)
+                if len(selected) >= limit:
+                    break
 
         return selected
 
@@ -166,13 +351,13 @@ class AIService:
         target_count: int,
     ) -> list[GeneratedQuestionPayload]:
         merged: list[GeneratedQuestionPayload] = []
-        seen_prompt_keys: set[str] = set()
+        seen_unique_keys: set[str] = set()
         for group in groups:
             for item in group:
-                key = self._prompt_key(item.prompt)
-                if key in seen_prompt_keys:
+                key = self._question_uniqueness_key(item)
+                if key in seen_unique_keys:
                     continue
-                seen_prompt_keys.add(key)
+                seen_unique_keys.add(key)
                 merged.append(item)
                 if len(merged) >= target_count:
                     return merged
@@ -189,16 +374,16 @@ class AIService:
         if len(output) >= target_count:
             return output[:target_count]
 
-        seen_prompts: set[str] = set()
+        seen_unique_keys: set[str] = set()
         for item in output:
-            seen_prompts.add(self._prompt_key(item.prompt))
+            seen_unique_keys.add(self._question_uniqueness_key(item))
 
         for group in fallback_groups:
             for item in group:
-                prompt_key = self._prompt_key(item.prompt)
-                if prompt_key in seen_prompts:
+                unique_key = self._question_uniqueness_key(item)
+                if unique_key in seen_unique_keys:
                     continue
-                seen_prompts.add(prompt_key)
+                seen_unique_keys.add(unique_key)
                 output.append(item)
                 if len(output) >= target_count:
                     return output[:target_count]
@@ -244,7 +429,7 @@ class AIService:
 
         # Final fallback: synthesize unique prompts locally.
         rng = random.Random(f"{seed}-force")
-        existing_prompt_keys = {self._prompt_key(item.prompt) for item in output}
+        existing_unique_keys = {self._question_uniqueness_key(item) for item in output}
         forced: list[GeneratedQuestionPayload] = []
         topic_pool = self._topic_pool(subject=subject, language=language, focus_topics=focus_topics)
         max_attempts = max(80, (target_count - len(output)) * 20)
@@ -272,15 +457,15 @@ class AIService:
                 mode=mode,
                 target_count=1,
                 focus_topics=focus_topics,
-                existing_prompt_keys=existing_prompt_keys,
+                existing_prompt_keys=existing_unique_keys,
             )
             if not sanitized:
                 continue
             item = sanitized[0]
-            key = self._prompt_key(item.prompt)
-            if key in existing_prompt_keys:
+            key = self._question_uniqueness_key(item)
+            if key in existing_unique_keys:
                 continue
-            existing_prompt_keys.add(key)
+            existing_unique_keys.add(key)
             forced.append(item)
 
         output = self._merge_unique_questions(
@@ -460,7 +645,7 @@ Seed уникальности: {seed}
                 seed=f"{seed}-fallback",
                 focus_topics=focus_topics,
             )
-            prompt_keys = {self._prompt_key(item.prompt) for item in sanitized_questions}
+            prompt_keys = {self._question_uniqueness_key(item) for item in sanitized_questions}
             sanitized_questions.extend(
                 self._sanitize_questions(
                     questions=fallback.questions,
@@ -475,7 +660,7 @@ Seed уникальности: {seed}
             )
 
         if len(sanitized_questions) < num_questions:
-            raise ValueError("Unable to prepare enough valid questions for test")
+            raise ValueError("Не удалось подготовить достаточное количество корректных вопросов для теста")
 
         return GeneratedTestPayload(seed=seed, questions=sanitized_questions[:num_questions])
 
@@ -507,7 +692,7 @@ Seed уникальности: {seed}
         data = self._extract_json(content)
         tasks = data.get("generated_tasks", [])[:5]
         if len(tasks) < 5:
-            raise ValueError("Not enough generated tasks")
+            raise ValueError("Недостаточно сгенерированных заданий")
         return RecommendationPayload(advice_text=data.get("advice_text", ""), generated_tasks=tasks)
 
     def _call_deepseek(self, prompt: str) -> str:
@@ -696,7 +881,7 @@ Seed уникальности: {seed}
         rng: random.Random,
     ) -> list[GeneratedQuestionPayload]:
         output = list(existing_questions)
-        prompt_keys = {self._prompt_key(item.prompt) for item in output}
+        unique_keys = {self._question_uniqueness_key(item) for item in output}
         variant_offset = 100
 
         for attempt in range(8):
@@ -766,14 +951,14 @@ Seed уникальности: {seed}
                 mode=mode,
                 target_count=needed,
                 focus_topics=focus_topics,
-                existing_prompt_keys=prompt_keys,
+                existing_prompt_keys=unique_keys,
             )
             if not sanitized_extra:
                 continue
 
             output.extend(sanitized_extra)
             for question in sanitized_extra:
-                prompt_keys.add(self._prompt_key(question.prompt))
+                unique_keys.add(self._question_uniqueness_key(question))
 
         if len(output) < target_count:
             logger.warning(
@@ -828,7 +1013,10 @@ Seed уникальности: {seed}
         selected = grouped[: min(num_questions, len(grouped))]
         return [
             self._build_question_from_bank_template(
-                template=template,
+                template={
+                    **template,
+                    "template_content_key": self._library_content_key(str(template.get("prompt", ""))),
+                },
                 subject=subject,
                 difficulty=difficulty,
                 language=language,
@@ -858,6 +1046,7 @@ Seed уникальности: {seed}
         for index in range(count):
             base = dict(rotation[index % len(rotation)])
             base_prompt = str(base.get("prompt", "")).strip()
+            base["template_content_key"] = self._library_content_key(base_prompt)
             base["prompt"] = self._variant_prompt(
                 base_prompt,
                 language=language,
@@ -942,7 +1131,83 @@ Seed уникальности: {seed}
 
     @staticmethod
     def _variant_prompt(prompt: str, *, language: PreferredLanguage, variant_index: int) -> str:
-        return prompt.strip()
+        base = prompt.strip()
+        if not base or variant_index <= 0:
+            return base
+
+        if language == PreferredLanguage.ru:
+            openers = [
+                "Рассмотрите учебный контекст.",
+                "Проанализируйте формулировку и выберите точный ответ.",
+                "Опирайтесь на ключевое правило темы.",
+                "Сопоставьте условие с базовым определением.",
+                "Проверьте причинно-следственную связь в вопросе.",
+                "Используйте базовый факт и исключите лишнее.",
+                "Сначала определите главную идею задания.",
+                "Сравните варианты и выберите обоснованный ответ.",
+                "Оцените условие с точки зрения учебной практики.",
+                "Вспомните основной термин и его применение.",
+                "Проверьте условие на логическую точность.",
+                "Сконцентрируйтесь на ключевом элементе темы.",
+            ]
+            closers = [
+                "Сделайте выбор только после короткой проверки условия.",
+                "Не пропускайте уточнения в формулировке задания.",
+                "Сверьте ответ с основным правилом темы.",
+                "Исключите варианты с подменой понятий.",
+                "Ориентируйтесь на точный учебный термин.",
+                "Проверьте, что ответ опирается на факт, а не догадку.",
+                "Учитывайте базовый подход из школьной программы.",
+                "Сначала отметьте верный принцип, затем выбирайте вариант.",
+            ]
+        else:
+            openers = [
+                "Оқу контекстін ескеріңіз.",
+                "Тұжырымды талдап, нақты жауапты таңдаңыз.",
+                "Тақырыптың негізгі ережесіне сүйеніңіз.",
+                "Шартты базалық анықтамамен салыстырыңыз.",
+                "Сұрақтағы себеп-салдар байланысын тексеріңіз.",
+                "Негізгі фактіні қолданып, артық нұсқаларды алып тастаңыз.",
+                "Алдымен тапсырманың басты идеясын анықтаңыз.",
+                "Нұсқаларды салыстырып, дәлелді жауап таңдаңыз.",
+                "Шартты оқу практикасы тұрғысынан бағалаңыз.",
+                "Негізгі термин мен оның қолданылуын еске түсіріңіз.",
+                "Шарттың логикалық дәлдігін тексеріңіз.",
+                "Тақырыптың түйінді бөлігіне назар аударыңыз.",
+            ]
+            closers = [
+                "Жауап бермес бұрын шартты қысқаша қайта тексеріңіз.",
+                "Тапсырма тұжырымындағы нақтылауларды өткізіп алмаңыз.",
+                "Жауапты тақырыптың негізгі ережесімен салыстырыңыз.",
+                "Ұғымдар шатастырылған нұсқаларды алып тастаңыз.",
+                "Нақты оқу терминіне сүйеніңіз.",
+                "Жауаптың жорамалға емес, фактіге негізделгенін тексеріңіз.",
+                "Мектеп бағдарламасындағы базалық тәсілді қолданыңыз.",
+                "Алдымен дұрыс принципті анықтап, содан кейін таңдаңыз.",
+            ]
+
+        opener = openers[variant_index % len(openers)]
+        closer = closers[(variant_index // len(openers)) % len(closers)]
+        return f"{opener} {base} {closer}".strip()
+
+    @staticmethod
+    def _build_library_prompt_variant(
+        *,
+        prompt: str,
+        language: PreferredLanguage,
+        variant_index: int,
+        salt: int = 0,
+    ) -> str:
+        base = prompt.strip()
+        if not base:
+            return base
+        if variant_index <= 0:
+            return base
+        return AIService._variant_prompt(
+            base,
+            language=language,
+            variant_index=variant_index + max(0, salt),
+        )
 
     @staticmethod
     def _format_quadratic(a: int, b: int, c: int) -> str:
@@ -1036,7 +1301,30 @@ Seed уникальности: {seed}
         new_price = int(base * (100 + percent) / 100)
         prompt_ru = f"Товар стоил {base} и подорожал на {percent}%. Какая новая цена?"
         prompt_kz = f"Тауар бағасы {base} болып, {percent}% өсті. Жаңа баға қанша?"
-        options = [str(new_price), str(new_price + base // 10), str(new_price - base // 10), str(base)]
+        wrong_candidates = [
+            base,
+            int(base * (100 + percent // 2) / 100),
+            int(base * (100 + percent + 10) / 100),
+            int(base * (100 - percent) / 100),
+            new_price + max(5, base // 20),
+            max(1, new_price - max(5, base // 20)),
+        ]
+        unique_wrong: list[int] = []
+        seen_wrong: set[int] = set()
+        for value in wrong_candidates:
+            if value == new_price or value in seen_wrong:
+                continue
+            seen_wrong.add(value)
+            unique_wrong.append(value)
+            if len(unique_wrong) >= 3:
+                break
+        while len(unique_wrong) < 3:
+            candidate = new_price + (len(unique_wrong) + 1) * 7
+            if candidate == new_price or candidate in seen_wrong:
+                candidate += 3
+            seen_wrong.add(candidate)
+            unique_wrong.append(candidate)
+        options = [str(new_price), *[str(value) for value in unique_wrong[:3]]]
         return {
             "type": "single_choice",
             "topic": "Проценты" if language == PreferredLanguage.ru else "Пайыз",
@@ -1093,6 +1381,13 @@ Seed уникальности: {seed}
         )
         prompt = str(template.get("prompt", "")).strip()
         explanation = str(template.get("explanation", "")).strip() or self._build_default_explanation(topic=topic, language=language)
+        template_content_key = str(template.get("template_content_key", "")).strip().lower()
+        base_prompt_key = str(template.get("base_prompt_key", "")).strip().lower()
+        explanation_payload: dict[str, Any] = {"topic": topic, "correct_explanation": explanation}
+        if template_content_key:
+            explanation_payload["library_template_key"] = template_content_key
+        if base_prompt_key:
+            explanation_payload["library_base_key"] = base_prompt_key
 
         template_type = str(template.get("type", "single_choice")).strip()
         if template_type == QuestionType.short_text.value:
@@ -1111,7 +1406,7 @@ Seed уникальности: {seed}
                 prompt=prompt,
                 options_json=None,
                 correct_answer_json={"keywords": keywords, "sample_answer": sample_answer},
-                explanation_json={"topic": topic, "correct_explanation": explanation},
+                explanation_json=explanation_payload,
                 tts_text=None,
             )
 
@@ -1137,7 +1432,7 @@ Seed уникальности: {seed}
             prompt=prompt,
             options_json={"options": [{"id": idx, "text": text} for idx, text in enumerate(options)]},
             correct_answer_json={"correct_option_ids": correct_option_ids},
-            explanation_json={"topic": topic, "correct_explanation": explanation},
+            explanation_json=explanation_payload,
             tts_text=None,
         )
 
@@ -1319,6 +1614,9 @@ Seed уникальности: {seed}
         language: PreferredLanguage,
         weak_topics: list[str],
     ) -> RecommendationPayload:
+        if not weak_topics:
+            weak_topics = ["Углубление темы"] if language == PreferredLanguage.ru else ["Тақырыпты тереңдету"]
+
         subject_name = subject.name_ru if language == PreferredLanguage.ru else subject.name_kz
         if language == PreferredLanguage.ru:
             advice = (
@@ -1356,10 +1654,10 @@ Seed уникальности: {seed}
             difficulty=difficulty,
         )
         if not templates:
-            return []
+            templates = []
 
         rng = random.Random(f"library::{subject.name_ru}::{language.value}::{difficulty.value}")
-        target_count = max(self.LIBRARY_QUESTIONS_PER_COMBINATION, len(templates))
+        target_count = self.LIBRARY_QUESTIONS_PER_COMBINATION
         text_questions = self._generate_text_questions_from_bank(
             subject=subject,
             difficulty=difficulty,
@@ -1401,7 +1699,7 @@ Seed уникальности: {seed}
                 )
             )
 
-        return self._sanitize_questions(
+        candidates = self._sanitize_questions(
             questions=candidates,
             subject=subject,
             difficulty=difficulty,
@@ -1410,6 +1708,56 @@ Seed уникальности: {seed}
             target_count=target_count,
             focus_topics=[],
         )
+
+        if len(candidates) < target_count:
+            needed = target_count - len(candidates)
+            extra_seed = f"library-ai::{subject.id}::{language.value}::{difficulty.value}::{mode.value}"
+            try:
+                if settings.ai_provider.lower() == "deepseek" and settings.deepseek_api_key:
+                    extra_payload = self._generate_test_deepseek(
+                        subject=subject,
+                        difficulty=difficulty,
+                        language=language,
+                        mode=mode,
+                        num_questions=max(needed * 3, needed + 8),
+                        seed=extra_seed,
+                        focus_topics=[],
+                    )
+                else:
+                    extra_payload = self._generate_test_mock(
+                        subject=subject,
+                        difficulty=difficulty,
+                        language=language,
+                        mode=mode,
+                        num_questions=max(needed * 3, needed + 8),
+                        seed=extra_seed,
+                        focus_topics=[],
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to build AI-backed library questions: %s", exc)
+                extra_payload = GeneratedTestPayload(seed=extra_seed, questions=[])
+
+            start_index = len(candidates)
+            attached_extras: list[GeneratedQuestionPayload] = []
+            for idx, question in enumerate(extra_payload.questions):
+                attached_extras.append(
+                    self._attach_library_metadata(
+                        question=question,
+                        subject=subject,
+                        difficulty=difficulty,
+                        language=language,
+                        mode=mode,
+                        library_index=start_index + idx,
+                        template_content_key=self._library_content_key(question.prompt),
+                    )
+                )
+
+            candidates = self._merge_unique_questions(
+                groups=[candidates, attached_extras],
+                target_count=target_count,
+            )
+
+        return candidates[:target_count]
 
     def _adapt_library_question_to_mode(
         self,
@@ -1496,6 +1844,7 @@ Seed уникальности: {seed}
         language: PreferredLanguage,
         mode: TestMode,
         library_index: int,
+        template_content_key: str | None = None,
     ) -> GeneratedQuestionPayload:
         explanation_json = dict(question.explanation_json or {})
         topic = str(explanation_json.get("topic", "")).strip() or (
@@ -1511,6 +1860,12 @@ Seed уникальности: {seed}
         explanation_json["library_topic"] = topic
         explanation_json["library_difficulty"] = difficulty.value
         explanation_json["library_content_key"] = self._library_content_key(question.prompt)
+        inherited_template_key = str(explanation_json.get("library_template_key", "")).strip().lower()
+        explanation_json["library_template_key"] = (
+            str(template_content_key).strip().lower()
+            if template_content_key and str(template_content_key).strip()
+            else (inherited_template_key or explanation_json["library_content_key"])
+        )
         return GeneratedQuestionPayload(
             type=question.type,
             prompt=question.prompt,
@@ -1637,6 +1992,52 @@ Seed уникальности: {seed}
         difficulty: DifficultyLevel,
         rng: random.Random,
     ) -> GeneratedQuestionPayload:
+        template_candidates = get_text_question_templates(
+            subject_name_ru=subject.name_ru,
+            language=language,
+            difficulty=difficulty,
+        )
+        if template_candidates:
+            topic_key = topic.lower()
+            filtered = [
+                item
+                for item in template_candidates
+                if topic_key in str(item.get("topic", "")).lower() or topic_key in str(item.get("prompt", "")).lower()
+            ]
+            template = dict(rng.choice(filtered or template_candidates))
+            template["template_content_key"] = self._library_content_key(str(template.get("prompt", "")))
+            base_question = self._build_question_from_bank_template(
+                template=template,
+                subject=subject,
+                difficulty=difficulty,
+                language=language,
+                rng=rng,
+            )
+
+            if qtype == QuestionType.short_text and base_question.type != QuestionType.short_text:
+                topic_value = str((base_question.explanation_json or {}).get("topic", "")).strip() or topic
+                return self._make_short_text_question(
+                    prompt=base_question.prompt,
+                    topic=topic_value,
+                    explanation_json=base_question.explanation_json,
+                    language=language,
+                    source_correct_answer_json=base_question.correct_answer_json,
+                    oral=False,
+                )
+            if qtype == QuestionType.oral_answer:
+                return self._adapt_library_question_to_mode(
+                    question=base_question,
+                    mode=TestMode.oral,
+                    language=language,
+                )
+            if mode != TestMode.text:
+                return self._adapt_library_question_to_mode(
+                    question=base_question,
+                    mode=mode,
+                    language=language,
+                )
+            return base_question
+
         subject_name = subject.name_ru if language == PreferredLanguage.ru else subject.name_kz
 
         if language == PreferredLanguage.ru:
@@ -1791,16 +2192,13 @@ Seed уникальности: {seed}
 
             normalized: GeneratedQuestionPayload
             if qtype in {QuestionType.single_choice, QuestionType.multi_choice}:
-                options = self._sanitize_choice_options(
+                options, correct_option_ids = self._sanitize_choice_payload(
                     topic=topic,
                     language=language,
                     option_count=self._choice_option_count(difficulty),
                     source_options=question.options_json,
-                )
-                correct_option_ids = self._sanitize_correct_option_ids(
-                    source=question.correct_answer_json,
+                    source_correct_answer=question.correct_answer_json,
                     question_type=qtype,
-                    option_count=len(options),
                 )
                 normalized = GeneratedQuestionPayload(
                     type=qtype,
@@ -1846,7 +2244,7 @@ Seed уникальности: {seed}
                     oral=(qtype == QuestionType.oral_answer),
                 )
 
-            key = self._prompt_key(normalized.prompt)
+            key = self._question_uniqueness_key(normalized)
             if key in seen_prompt_keys:
                 continue
             seen_prompt_keys.add(key)
@@ -1854,6 +2252,94 @@ Seed уникальности: {seed}
 
         self._enforce_text_difficulty_mix(questions=output, language=language, mode=mode, difficulty=difficulty)
         return output[:target_count]
+
+    def _sanitize_choice_payload(
+        self,
+        *,
+        topic: str,
+        language: PreferredLanguage,
+        option_count: int,
+        source_options: dict[str, Any] | None,
+        source_correct_answer: dict[str, Any] | None,
+        question_type: QuestionType,
+    ) -> tuple[list[dict[str, Any]], list[int]]:
+        raw_items = []
+        if source_options and isinstance(source_options, dict):
+            raw_items = source_options.get("options", []) or []
+
+        normalized_texts: list[str] = []
+        text_to_index: dict[str, int] = {}
+        raw_to_normalized: dict[int, int] = {}
+        for raw_idx, item in enumerate(raw_items):
+            text = ""
+            if isinstance(item, dict):
+                text = str(item.get("text", "")).strip()
+            elif isinstance(item, str):
+                text = item.strip()
+            if not text:
+                continue
+            cleaned = self._strip_option_label(text)
+            key = cleaned.lower()
+            if key not in text_to_index:
+                text_to_index[key] = len(normalized_texts)
+                normalized_texts.append(cleaned)
+            raw_to_normalized[raw_idx] = text_to_index[key]
+
+        raw_correct_ids = []
+        values = (source_correct_answer or {}).get("correct_option_ids", [])
+        if isinstance(values, list):
+            for value in values:
+                try:
+                    raw_id = int(value)
+                except (TypeError, ValueError):
+                    continue
+                raw_correct_ids.append(raw_id)
+
+        remapped_correct_ids: list[int] = []
+        for raw_id in raw_correct_ids:
+            mapped = raw_to_normalized.get(raw_id)
+            if mapped is None:
+                continue
+            if mapped not in remapped_correct_ids:
+                remapped_correct_ids.append(mapped)
+
+        fallback_texts = self._fallback_option_texts(topic=topic, language=language, count=option_count * 3)
+        for fallback in fallback_texts:
+            if len(normalized_texts) >= option_count:
+                break
+            key = fallback.lower()
+            if key in text_to_index:
+                continue
+            text_to_index[key] = len(normalized_texts)
+            normalized_texts.append(fallback)
+
+        if len(normalized_texts) > option_count:
+            mandatory = sorted({idx for idx in remapped_correct_ids if 0 <= idx < len(normalized_texts)})
+            others = [idx for idx in range(len(normalized_texts)) if idx not in mandatory]
+            selected = mandatory + others[: max(0, option_count - len(mandatory))]
+            selected = sorted(set(selected))[:option_count]
+            remap = {old: new for new, old in enumerate(selected)}
+            normalized_texts = [normalized_texts[idx] for idx in selected]
+            remapped_correct_ids = [remap[idx] for idx in mandatory if idx in remap]
+
+        if question_type == QuestionType.single_choice:
+            if not remapped_correct_ids:
+                remapped_correct_ids = [0]
+            else:
+                remapped_correct_ids = [remapped_correct_ids[0]]
+        else:
+            if not remapped_correct_ids:
+                remapped_correct_ids = [0, 1] if len(normalized_texts) > 1 else [0]
+            if len(remapped_correct_ids) == 1 and len(normalized_texts) > 1:
+                remapped_correct_ids.append(1 if remapped_correct_ids[0] != 1 else 0)
+            remapped_correct_ids = sorted(set(remapped_correct_ids[:3]))
+
+        options: list[dict[str, Any]] = []
+        for index, text in enumerate(normalized_texts[:option_count]):
+            label = self.OPTION_LABELS[index]
+            options.append({"id": index, "text": f"{label}. {text}"})
+
+        return options, remapped_correct_ids
 
     def _enforce_text_difficulty_mix(
         self,
@@ -2181,9 +2667,24 @@ Seed уникальности: {seed}
     @staticmethod
     def _prompt_key(prompt: str) -> str:
         normalized = re.sub(r"\s+", " ", prompt.lower()).strip()
+        normalized = re.sub(r"^\s*\[[^\]]+\]\s*", "", normalized).strip()
+        normalized = re.sub(r"^\s*вопрос\s*\d+\s*[:.\-]\s*", "", normalized).strip()
+        normalized = re.sub(r"^\s*\d+\s*[-.)]\s*", "", normalized).strip()
         normalized = re.sub(r"\s*\((вариант|нұсқа)\s*\d+\)\s*$", "", normalized, flags=re.IGNORECASE).strip()
         normalized = re.sub(r"[.!?…]+$", "", normalized).strip()
         return normalized
+
+    def _question_uniqueness_key(self, question: GeneratedQuestionPayload) -> str:
+        explanation = dict(question.explanation_json or {})
+        template_key = str(explanation.get("library_template_key", "")).strip().lower()
+        if template_key:
+            return f"tpl::{template_key}"
+
+        content_key = str(explanation.get("library_content_key", "")).strip().lower()
+        if content_key:
+            return f"cnt::{content_key}"
+
+        return f"pr::{self._prompt_key(question.prompt)}"
 
     def _fallback_option_texts(self, *, topic: str, language: PreferredLanguage, count: int) -> list[str]:
         if language == PreferredLanguage.ru:

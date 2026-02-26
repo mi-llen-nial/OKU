@@ -25,11 +25,15 @@ export const assetPaths = {
     biology: `/assets/icons/streamline_bacteria-virus-cells-biology-solid.svg?v=${ICONS_VERSION}`,
     chemistry: `/assets/icons/material-symbols_biotech-rounded.svg?v=${ICONS_VERSION}`,
     informatics: `/assets/icons/solar_cpu-bold.svg?v=${ICONS_VERSION}`,
+    ent: `/assets/icons/healthicons_i-exam-multiple-choice.svg?v=${ICONS_VERSION}`,
+    ielts: `/assets/icons/ri_english-input.svg?v=${ICONS_VERSION}`,
     soon: `/assets/icons/solar_server-square-update-outline.svg?v=${ICONS_VERSION}`,
   },
   images: {
     parchment: "/assets/images/bg-parchment.svg",
     arcaneFrame: "/assets/images/arcane-frame.svg",
+    qrOku: "/assets/images/t_me-KOMA_OKU_bot%201.png",
+    qrFaq: "/assets/images/FAQ_bot.png",
   },
   illustrations: {
     owl: "/assets/illustrations/illus-owl.svg",

@@ -1,0 +1,208 @@
+.page {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  gap: 36px;
+  padding-bottom: 56px;
+}
+
+.section {
+  display: grid;
+  gap: 16px;
+}
+
+.header {
+  display: grid;
+  gap: 8px;
+}
+
+.header h2,
+.header h3 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.header p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 16px;
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.inviteGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.inviteCard {
+  border: 1px solid var(--line-color);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.inviteCard input {
+  width: auto;
+  margin: 0;
+}
+
+.icon {
+  color: var(--brand-primary);
+}
+
+.inviteCard h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.inviteCard p {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.tableWrap {
+  border: 1px solid var(--line-color);
+  border-radius: 14px;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-color);
+  font-size: 14px;
+}
+
+.table th {
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.status {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pending {
+  color: #a28f09;
+}
+
+.accepted {
+  color: #188146;
+}
+
+.declined {
+  color: #bf1f39;
+}
+
+.success {
+  color: #188146;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 22, 0.32);
+  display: grid;
+  place-items: center;
+  z-index: 40;
+  padding: 16px;
+}
+
+.modal {
+  width: min(520px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+  position: relative;
+}
+
+.modal h3 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.modal p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 16px;
+}
+
+.modalActions {
+  display: flex;
+  gap: 10px;
+}
+
+.close {
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 1024px) {
+  .inviteGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .header h2,
+  .header h3,
+  .modal h3 {
+    font-size: 20px;
+  }
+
+  .header p,
+  .modal p,
+  .inviteCard h4 {
+    font-size: 14px;
+  }
+
+  .inviteCard p,
+  .table th,
+  .table td,
+  .status,
+  .success {
+    font-size: 12px;
+  }
+
+  .modal label,
+  .modal input {
+    font-size: 14px;
+  }
+}

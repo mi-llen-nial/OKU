@@ -1,6 +1,6 @@
 "use client";
 
-import { Volume2, VolumeX } from "lucide-react";
+import { Mic, Square, Volume2, VolumeX } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -26,6 +26,50 @@ interface TestIntegrityWarning {
   details?: Record<string, unknown>;
 }
 
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  length: number;
+  [index: number]: {
+    transcript: string;
+    confidence: number;
+  };
+}
+
+interface SpeechRecognitionEventLike extends Event {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionErrorEventLike extends Event {
+  error?: string;
+  message?: string;
+}
+
+interface SpeechRecognitionInstanceLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onstart: ((event: Event) => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: ((event: Event) => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionInstanceLike;
+
+interface OralAnswerControls {
+  supported: boolean;
+  listening: boolean;
+  activeQuestionId: number | null;
+  error: string;
+  onStart: (question: Question) => void;
+  onStop: () => void;
+}
+
 export default function TestRunnerPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -40,11 +84,18 @@ export default function TestRunnerPage() {
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState("");
+  const [oralSupported, setOralSupported] = useState(false);
+  const [oralListening, setOralListening] = useState(false);
+  const [oralError, setOralError] = useState("");
+  const [oralQuestionId, setOralQuestionId] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [integrityWarnings, setIntegrityWarnings] = useState<TestIntegrityWarning[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
+  const speechRecognitionRef = useRef<SpeechRecognitionInstanceLike | null>(null);
+  const speechPrefixRef = useRef("");
+  const speechQuestionIdRef = useRef<number | null>(null);
   const ttsRequestIdRef = useRef(0);
   const elapsedRef = useRef(0);
   const warningsRef = useRef<TestIntegrityWarning[]>([]);
@@ -59,15 +110,22 @@ export default function TestRunnerPage() {
 
     getTest(token, testId)
       .then((payload) => setTest(payload))
-      .catch((err) => setError(err instanceof Error ? err.message : "Cannot load test"))
+      .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить тест"))
       .finally(() => setLoading(false));
   }, [testId]);
+
+  useEffect(() => {
+    setOralSupported(Boolean(getSpeechRecognitionCtor()));
+  }, []);
 
   const question = test?.questions[currentIndex] || null;
   const total = test?.questions.length || 0;
   const progress = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
   const timeLimitSeconds = test?.time_limit_seconds ?? null;
+  const warningLimit = test?.warning_limit ?? null;
+  const remainingSeconds = timeLimitSeconds !== null ? Math.max(timeLimitSeconds - elapsedSeconds, 0) : null;
   const isTimeLimitReached = timeLimitSeconds !== null && elapsedSeconds >= timeLimitSeconds;
+  const isWarningLimitReached = warningLimit !== null && integrityWarnings.length >= warningLimit;
 
   const answerForCurrent = useMemo(() => {
     if (!question) return {};
@@ -151,6 +209,115 @@ export default function TestRunnerPage() {
       updateAnswer(questionId, { matches: { ...existing, [left]: right } });
     },
     [answers, updateAnswer],
+  );
+
+  const stopOralRecognition = useCallback((abort = false) => {
+    const recognition = speechRecognitionRef.current;
+    if (!recognition) return;
+
+    recognition.onstart = null;
+    recognition.onresult = null;
+    recognition.onerror = null;
+    recognition.onend = null;
+    try {
+      if (abort) {
+        recognition.abort();
+      } else {
+        recognition.stop();
+      }
+    } catch {
+      // ignore speech recognition stop errors
+    }
+
+    speechRecognitionRef.current = null;
+    speechQuestionIdRef.current = null;
+    setOralListening(false);
+    setOralQuestionId(null);
+  }, []);
+
+  const startOralRecognition = useCallback(
+    (targetQuestion: Question) => {
+      if (targetQuestion.type !== "oral_answer") return;
+      const SpeechRecognitionCtorValue = getSpeechRecognitionCtor();
+      if (!SpeechRecognitionCtorValue) {
+        setOralError("Распознавание речи недоступно в этом браузере. Введите ответ вручную.");
+        return;
+      }
+
+      setOralError("");
+      stopOralRecognition(true);
+
+      const answer = answers[targetQuestion.id] || {};
+      speechPrefixRef.current = String(answer.spoken_answer_text || "").trim();
+      speechQuestionIdRef.current = targetQuestion.id;
+
+      const recognition = new SpeechRecognitionCtorValue();
+      recognition.lang = test?.language === "KZ" ? "kk-KZ" : "ru-RU";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setOralListening(true);
+        setOralQuestionId(targetQuestion.id);
+      };
+
+      recognition.onresult = (event) => {
+        const activeQuestionId = speechQuestionIdRef.current;
+        if (!activeQuestionId) return;
+
+        const finalSegments: string[] = [];
+        const interimSegments: string[] = [];
+        for (let idx = 0; idx < event.results.length; idx += 1) {
+          const result = event.results[idx];
+          if (!result || !result.length) continue;
+          const transcript = normalizeSpokenText(result[0]?.transcript || "");
+          if (!transcript) continue;
+          if (result.isFinal) {
+            finalSegments.push(transcript);
+          } else {
+            interimSegments.push(transcript);
+          }
+        }
+
+        const fullText = normalizeSpokenText(
+          [speechPrefixRef.current, finalSegments.join(" "), interimSegments.join(" ")]
+            .filter(Boolean)
+            .join(" "),
+        );
+        updateAnswer(activeQuestionId, { spoken_answer_text: fullText });
+      };
+
+      recognition.onerror = (event) => {
+        const message = getSpeechRecognitionErrorMessage(event.error);
+        if (message) {
+          setOralError(message);
+        }
+        setOralListening(false);
+        setOralQuestionId(null);
+        speechRecognitionRef.current = null;
+        speechQuestionIdRef.current = null;
+      };
+
+      recognition.onend = () => {
+        setOralListening(false);
+        setOralQuestionId(null);
+        speechRecognitionRef.current = null;
+        speechQuestionIdRef.current = null;
+      };
+
+      speechRecognitionRef.current = recognition;
+      try {
+        recognition.start();
+      } catch (err) {
+        setOralError(err instanceof Error ? err.message : "Не удалось запустить распознавание речи.");
+        setOralListening(false);
+        setOralQuestionId(null);
+        speechRecognitionRef.current = null;
+        speechQuestionIdRef.current = null;
+      }
+    },
+    [answers, stopOralRecognition, test?.language, updateAnswer],
   );
 
   const stopAudio = useCallback(() => {
@@ -297,8 +464,9 @@ export default function TestRunnerPage() {
   useEffect(() => {
     return () => {
       stopAudio();
+      stopOralRecognition(true);
     };
-  }, [stopAudio]);
+  }, [stopAudio, stopOralRecognition]);
 
   useEffect(() => {
     if (!question || test?.mode !== "audio") return;
@@ -310,6 +478,14 @@ export default function TestRunnerPage() {
     void speakQuestion(question);
     return () => stopAudio();
   }, [question?.id, speakQuestion, stopAudio, test?.mode]);
+
+  useEffect(() => {
+    if (!question) return;
+    if (oralQuestionId !== null && oralQuestionId !== question.id) {
+      stopOralRecognition(true);
+    }
+    setOralError("");
+  }, [oralQuestionId, question?.id, stopOralRecognition]);
 
   const submit = useCallback(
     async (finalWarnings?: TestIntegrityWarning[]) => {
@@ -329,17 +505,18 @@ export default function TestRunnerPage() {
       };
 
       try {
+        stopOralRecognition(true);
         stopAudio();
         setSubmitting(true);
         await submitTest(token, test.id, body);
         router.push(`/results/${test.id}`);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Submit failed");
+        setError(err instanceof Error ? err.message : "Не удалось отправить тест на проверку");
       } finally {
         setSubmitting(false);
       }
     },
-    [answers, router, stopAudio, test],
+    [answers, router, stopAudio, stopOralRecognition, test],
   );
 
   useEffect(() => {
@@ -362,6 +539,15 @@ export default function TestRunnerPage() {
     setIntegrityWarnings(merged);
     submit(merged);
   }, [elapsedSeconds, submit, submitting, test, timeLimitSeconds]);
+
+  useEffect(() => {
+    if (!test || warningLimit === null || submitting) return;
+    if (integrityWarnings.length < warningLimit) return;
+    if (autoSubmittedRef.current) return;
+
+    autoSubmittedRef.current = true;
+    submit(warningsRef.current);
+  }, [integrityWarnings.length, submit, submitting, test, warningLimit]);
 
   const handleTextFocus = useCallback((questionId: number) => {
     textFocusAtRef.current[questionId] = Date.now();
@@ -455,18 +641,16 @@ export default function TestRunnerPage() {
           >
             <div className={styles.header}>
               <div className={styles.headerBadges}>
-                <Badge>{test.mode.toUpperCase()}</Badge>
-                <Badge>{test.language}</Badge>
-                <Badge>{test.difficulty}</Badge>
+                {test.exam_kind && <Badge variant="info">{test.exam_kind.toUpperCase()}</Badge>}
+                <Badge>{formatModeBadge(test.mode)}</Badge>
+                <Badge>{formatLanguageBadge(test.language)}</Badge>
+                <Badge>{formatDifficultyBadge(test.difficulty)}</Badge>
               </div>
               <div className={styles.headerMeta}>
                 <span className={styles.metaText}>Таймер: {formatDuration(elapsedSeconds)}</span>
-                {timeLimitSeconds !== null && (
-                  <span className={styles.metaText}>
-                    Лимит: {formatDuration(timeLimitSeconds)}
-                  </span>
-                )}
+                {remainingSeconds !== null && <span className={styles.metaText}>Осталось: {formatDuration(remainingSeconds)}</span>}
                 <span className={styles.metaText}>Предупреждения: {integrityWarnings.length}</span>
+                {warningLimit !== null && <span className={styles.metaText}>Лимит предупреждений: {warningLimit}</span>}
               </div>
               <div style={{ minWidth: 180, flex: "1 1 220px" }}>
                 <ProgressBar value={progress} />
@@ -474,6 +658,9 @@ export default function TestRunnerPage() {
             </div>
             {isTimeLimitReached && (
               <div className={styles.timeLimitError}>Лимит времени достигнут. Отправляем тест на проверку...</div>
+            )}
+            {isWarningLimitReached && (
+              <div className={styles.timeLimitError}>Достигнут лимит предупреждений. Тест автоматически отправляется.</div>
             )}
           </Card>
 
@@ -499,11 +686,19 @@ export default function TestRunnerPage() {
                 renderTextAnswer(
                   question,
                   answerForCurrent,
-                  updateAnswer,
                   handleTextFocus,
                   handleTextChange,
                   handleTextPaste,
                   handleTextShortcut,
+                  test.mode === "oral",
+                  {
+                    supported: oralSupported,
+                    listening: oralListening,
+                    activeQuestionId: oralQuestionId,
+                    error: oralError,
+                    onStart: startOralRecognition,
+                    onStop: () => stopOralRecognition(),
+                  },
                 )}
               {question.type === "matching" && renderMatching(question, answerForCurrent, updateMatching)}
             </div>
@@ -515,6 +710,7 @@ export default function TestRunnerPage() {
                 variant="ghost"
                 disabled={currentIndex === 0}
                 onClick={() => {
+                  stopOralRecognition(true);
                   stopAudio();
                   setCurrentIndex((idx) => Math.max(0, idx - 1));
                 }}
@@ -525,6 +721,7 @@ export default function TestRunnerPage() {
               {currentIndex < total - 1 ? (
                 <Button
                   onClick={() => {
+                    stopOralRecognition(true);
                     stopAudio();
                     setCurrentIndex((idx) => Math.min(total - 1, idx + 1));
                   }}
@@ -598,19 +795,43 @@ function renderMultiChoice(
 function renderTextAnswer(
   question: Question,
   answer: Record<string, unknown>,
-  updateAnswer: (questionId: number, value: Record<string, unknown>) => void,
   onFocus: (questionId: number) => void,
   onTextChange: (questionId: number, value: string, answerKey: "text" | "spoken_answer_text") => void,
   onPasteDetected: (questionId: number, pastedLength: number) => void,
   onPasteShortcut: (questionId: number, key: string, ctrlOrMeta: boolean, alt: boolean) => void,
+  forceOralInput: boolean,
+  oralControls: OralAnswerControls,
 ) {
-  const isOral = question.type === "oral_answer";
+  const isOral = question.type === "oral_answer" || forceOralInput;
   const key = isOral ? "spoken_answer_text" : "text";
   const value = (answer[key] as string | undefined) || "";
+  const oralActive = oralControls.listening && oralControls.activeQuestionId === question.id;
 
   return (
     <div className="stack">
-      {isOral && <div className="muted">Вставьте распознанную речь из STT (mock-режим).</div>}
+      {isOral && (
+        <div className={styles.oralWrap}>
+          <div className={styles.oralHint}>
+            Проговорите ответ голосом. Текст автоматически появится в поле ниже.
+          </div>
+          <div className={styles.oralControls}>
+            <Button
+              variant="secondary"
+              onClick={() => oralControls.onStart(question)}
+              disabled={!oralControls.supported || oralActive}
+            >
+              <Mic size={16} /> {oralActive ? "Идет запись..." : "Начать запись"}
+            </Button>
+            <Button variant="ghost" disabled={!oralActive} onClick={oralControls.onStop}>
+              <Square size={16} /> Остановить
+            </Button>
+          </div>
+          {!oralControls.supported && (
+            <div className="muted">Браузер не поддерживает распознавание речи. Можно ввести ответ вручную.</div>
+          )}
+          {oralControls.error && <div className={styles.oralError}>{oralControls.error}</div>}
+        </div>
+      )}
       <textarea
         onFocus={() => onFocus(question.id)}
         onChange={(e) => onTextChange(question.id, e.target.value, key)}
@@ -620,14 +841,6 @@ function renderTextAnswer(
         rows={4}
         value={value}
       />
-      {isOral && (
-        <Button
-          variant="secondary"
-          onClick={() => updateAnswer(question.id, { spoken_answer_text: `${value} [mock transcript]`.trim() })}
-        >
-          Сгенерировать mock STT
-        </Button>
-      )}
     </div>
   );
 }
@@ -658,6 +871,39 @@ function renderMatching(
       ))}
     </div>
   );
+}
+
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const maybeWindow = window as Window & {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+  return maybeWindow.SpeechRecognition || maybeWindow.webkitSpeechRecognition || null;
+}
+
+function getSpeechRecognitionErrorMessage(errorCode?: string): string {
+  if (!errorCode) return "Не удалось распознать речь. Попробуйте еще раз.";
+  if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
+    return "Нет доступа к микрофону. Разрешите доступ в настройках браузера.";
+  }
+  if (errorCode === "audio-capture") {
+    return "Микрофон не найден. Подключите микрофон и попробуйте снова.";
+  }
+  if (errorCode === "network") {
+    return "Ошибка сети при распознавании речи. Проверьте подключение к интернету.";
+  }
+  if (errorCode === "no-speech") {
+    return "Речь не распознана. Говорите чуть громче и повторите попытку.";
+  }
+  if (errorCode === "aborted") {
+    return "";
+  }
+  return "Не удалось распознать речь. Попробуйте еще раз.";
+}
+
+function normalizeSpokenText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -700,4 +946,20 @@ function buildAudioNarration(question: Question, language: "RU" | "KZ"): string 
 
 function sanitizeQuestionPrompt(prompt: string): string {
   return prompt.replace(/\s*\((вариант|нұсқа)\s*\d+\)\s*$/i, "").trim();
+}
+
+function formatModeBadge(mode: Test["mode"]): string {
+  if (mode === "audio") return "Аудио";
+  if (mode === "oral") return "Устный";
+  return "Стандарт";
+}
+
+function formatLanguageBadge(language: Test["language"]): string {
+  return language === "KZ" ? "Казахский" : "Русский";
+}
+
+function formatDifficultyBadge(difficulty: Test["difficulty"]): string {
+  if (difficulty === "easy") return "Легкий";
+  if (difficulty === "hard") return "Сложный";
+  return "Средний";
 }

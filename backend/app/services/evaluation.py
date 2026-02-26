@@ -50,12 +50,13 @@ def evaluate_answers(questions: list[Question], answers_by_question_id: dict[int
         )
 
     weak_topics = [topic for topic, _ in weak_topic_counter.most_common(3)]
-    defaults = ["Повторение теории", "Понимание терминов", "Применение на практике"]
-    for default_topic in defaults:
-        if len(weak_topics) >= 3:
-            break
-        if default_topic not in weak_topics:
-            weak_topics.append(default_topic)
+    if weak_topics:
+        defaults = ["Повторение теории", "Понимание терминов", "Применение на практике"]
+        for default_topic in defaults:
+            if len(weak_topics) >= 3:
+                break
+            if default_topic not in weak_topics:
+                weak_topics.append(default_topic)
 
     return EvaluationSummary(
         total_score=round(total_score, 2),

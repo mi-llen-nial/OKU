@@ -7,17 +7,18 @@ import { FormEvent, useState } from "react";
 import Button from "@/components/ui/Button";
 import { register } from "@/lib/api";
 import { saveSession } from "@/lib/auth";
-import { Language, UserRole } from "@/lib/types";
+import { EducationLevel, UserRole } from "@/lib/types";
 import { assetPaths } from "@/src/assets";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("student");
-  const [language, setLanguage] = useState<Language>("RU");
-  const [groupId, setGroupId] = useState("1");
+  const [educationLevel, setEducationLevel] = useState<EducationLevel>("school");
+  const [direction, setDirection] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -26,19 +27,28 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
 
+    const usernameValue = username.trim();
+    if (!/^[A-Za-z0-9_]{3,25}$/.test(usernameValue)) {
+      setLoading(false);
+      setError("Имя пользователя: только латинские буквы, цифры и _, длина 3-25 символов.");
+      return;
+    }
+
     try {
       const payload = await register({
         email,
-        username,
+        full_name: fullName,
+        username: usernameValue,
+        education_level: role === "student" ? educationLevel : undefined,
+        direction: role === "student" ? direction.trim() : undefined,
         password,
         role,
-        preferred_language: language,
-        group_id: role === "student" ? Number(groupId) : null,
+        preferred_language: "RU",
       });
       saveSession(payload);
-      router.push(role === "teacher" ? "/teacher" : "/dashboard");
+      router.push(payload.user.role === "teacher" ? "/teacher" : "/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registration error");
+      setError(err instanceof Error ? err.message : "Не удалось создать аккаунт");
     } finally {
       setLoading(false);
     }
@@ -57,17 +67,55 @@ export default function RegisterPage() {
 
         <form className="formGrid" onSubmit={handleSubmit}>
           <label>
-            Email
+            Почта
             <input onChange={(e) => setEmail(e.target.value)} required type="email" value={email} />
           </label>
 
           <label>
-            Username
-            <input onChange={(e) => setUsername(e.target.value)} required value={username} />
+            Имя и фамилия
+            <input onChange={(e) => setFullName(e.target.value)} required value={fullName} />
           </label>
 
           <label>
-            Password
+            Имя пользователя
+            <input
+              maxLength={25}
+              onChange={(e) => setUsername(e.target.value)}
+              pattern="[A-Za-z0-9_]{3,25}"
+              required
+              title="Только латинские буквы, цифры и _, длина 3-25 символов"
+              value={username}
+            />
+          </label>
+
+          <label>
+            Роль
+            <select onChange={(e) => setRole(e.target.value as UserRole)} value={role}>
+              <option value="student">Студент</option>
+              <option value="teacher">Преподаватель (админ)</option>
+            </select>
+          </label>
+
+          {role === "student" && (
+            <label>
+              Статус обучения
+              <select onChange={(e) => setEducationLevel(e.target.value as EducationLevel)} value={educationLevel}>
+                <option value="school">Школьник</option>
+                <option value="college">Студент колледжа</option>
+                <option value="university">Студент университета</option>
+              </select>
+            </label>
+          )}
+
+          {role === "student" && (
+            <label>
+              Направление
+              <input onChange={(e) => setDirection(e.target.value)} placeholder="Например: ИТ, медицина, экономика" required value={direction} />
+            </label>
+          )}
+
+          <label>
+            Пароль
             <input
               minLength={6}
               onChange={(e) => setPassword(e.target.value)}
@@ -76,29 +124,6 @@ export default function RegisterPage() {
               value={password}
             />
           </label>
-
-          <label>
-            Role
-            <select onChange={(e) => setRole(e.target.value as UserRole)} value={role}>
-              <option value="student">student</option>
-              <option value="teacher">teacher</option>
-            </select>
-          </label>
-
-          <label>
-            Preferred language
-            <select onChange={(e) => setLanguage(e.target.value as Language)} value={language}>
-              <option value="RU">RU</option>
-              <option value="KZ">KZ</option>
-            </select>
-          </label>
-
-          {role === "student" && (
-            <label>
-              Group ID
-              <input onChange={(e) => setGroupId(e.target.value)} type="number" value={groupId} />
-            </label>
-          )}
 
           {error && <div className="errorText">{error}</div>}
 

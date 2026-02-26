@@ -67,16 +67,33 @@ export default function ResultPage() {
     };
   }, [testId]);
 
-  const subjectName = useMemo(() => {
+  const resolvedSubjectName = useMemo(() => {
     if (!testMeta) return "Предмет";
     const subject = subjects.find((item) => item.id === testMeta.subject_id);
     if (!subject) return `Предмет #${testMeta.subject_id}`;
     return testMeta.language === "KZ" ? subject.name_kz : subject.name_ru;
   }, [subjects, testMeta]);
 
-  const subjectIcon = resolveSubjectIcon(subjectName);
+  const examName = useMemo(() => {
+    const kind = testMeta?.exam_kind;
+    if (!kind) return null;
+    return kind === "ent" ? "ЕНТ" : "IELTS";
+  }, [testMeta?.exam_kind]);
+
+  const subjectName = examName || resolvedSubjectName;
+  const subjectIcon = testMeta?.exam_kind === "ent"
+    ? assetPaths.icons.ent
+    : testMeta?.exam_kind === "ielts"
+      ? assetPaths.icons.ielts
+      : resolveSubjectIcon(resolvedSubjectName);
+  const subjectLabel = examName ? "Пройденный экзамен" : "Пройденный предмет";
+  const subjectMeta = examName
+    ? `${languageLabel(testMeta?.language)} · Экзамен`
+    : `${difficultyLabel(testMeta?.difficulty)} ${languageLabel(testMeta?.language)}`;
+  const modeMetricLabel = examName ? "Формат:" : "Сложность:";
+  const modeMetricValue = examName || difficultyLabel(testMeta?.difficulty);
   const recommendationText =
-    data?.recommendation.advice_text.trim() || "Сфокусируйтесь на темах с наименьшим баллом и повторите теорию короткими сессиями.";
+    data?.recommendation.advice_text.trim() || "Рекомендации временно недоступны. Повторите тест или откройте историю попыток.";
   const questionMap = useMemo(() => {
     const map = new Map<number, Question>();
     for (const question of testMeta?.questions || []) {
@@ -140,7 +157,7 @@ export default function ResultPage() {
                     </b>
                   </p>
                   <p className={styles.metricRow}>
-                    <span>Сложность:</span> <b>{difficultyLabel(testMeta?.difficulty)}</b>
+                    <span>{modeMetricLabel}</span> <b>{modeMetricValue}</b>
                   </p>
                   <p className={styles.metricRow}>
                     <span>Предупреждений:</span> <b>{data.result.warning_count}</b>
@@ -148,14 +165,12 @@ export default function ResultPage() {
                 </div>
 
                 <div className={styles.subjectBlock}>
-                  <p className={styles.subjectLabel}>Пройденный предмет</p>
+                  <p className={styles.subjectLabel}>{subjectLabel}</p>
                   <div className={styles.subjectRow}>
                     <img className={styles.subjectIcon} src={subjectIcon} alt={subjectName} />
                     <div className={styles.subjectTextGroup}>
                       <p className={styles.subjectName}>{subjectName}</p>
-                      <p className={styles.subjectMeta}>
-                        {difficultyLabel(testMeta?.difficulty)}&nbsp;&nbsp;{languageLabel(testMeta?.language)}
-                      </p>
+                      <p className={styles.subjectMeta}>{subjectMeta}</p>
                     </div>
                   </div>
                 </div>

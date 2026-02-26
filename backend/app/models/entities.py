@@ -50,12 +50,19 @@ class QuestionType(str, enum.Enum):
     oral_answer = "oral_answer"
 
 
+class InvitationStatus(str, enum.Enum):
+    pending = "pending"
+    accepted = "accepted"
+    declined = "declined"
+
+
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.student, nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -67,6 +74,17 @@ class User(Base):
     )
     tests: Mapped[list[Test]] = relationship(back_populates="student", cascade="all, delete-orphan")
     memberships: Mapped[list[GroupMembership]] = relationship(back_populates="student", cascade="all, delete-orphan")
+    groups_created: Mapped[list[Group]] = relationship(back_populates="teacher")
+    sent_invitations: Mapped[list[GroupInvitation]] = relationship(
+        back_populates="teacher",
+        foreign_keys="GroupInvitation.teacher_id",
+        cascade="all, delete-orphan",
+    )
+    received_invitations: Mapped[list[GroupInvitation]] = relationship(
+        back_populates="student",
+        foreign_keys="GroupInvitation.student_id",
+        cascade="all, delete-orphan",
+    )
 
 
 class Group(Base):
@@ -74,9 +92,12 @@ class Group(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    teacher_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True)
 
     profiles: Mapped[list[StudentProfile]] = relationship(back_populates="group")
     memberships: Mapped[list[GroupMembership]] = relationship(back_populates="group", cascade="all, delete-orphan")
+    teacher: Mapped[User | None] = relationship(back_populates="groups_created")
+    invitations: Mapped[list[GroupInvitation]] = relationship(back_populates="group")
 
 
 class GroupMembership(Base):
@@ -91,12 +112,30 @@ class GroupMembership(Base):
     group: Mapped[Group] = relationship(back_populates="memberships")
 
 
+class GroupInvitation(Base):
+    __tablename__ = "group_invitations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id", ondelete="SET NULL"), index=True, nullable=True)
+    status: Mapped[InvitationStatus] = mapped_column(Enum(InvitationStatus), default=InvitationStatus.pending, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    teacher: Mapped[User] = relationship(back_populates="sent_invitations", foreign_keys=[teacher_id])
+    student: Mapped[User] = relationship(back_populates="received_invitations", foreign_keys=[student_id])
+    group: Mapped[Group | None] = relationship(back_populates="invitations")
+
+
 class StudentProfile(Base):
     __tablename__ = "student_profiles"
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id", ondelete="SET NULL"), nullable=True)
     preferred_language: Mapped[PreferredLanguage] = mapped_column(Enum(PreferredLanguage), default=PreferredLanguage.ru)
+    education_level: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="student_profile")
     group: Mapped[Group | None] = relationship(back_populates="profiles")
@@ -141,6 +180,9 @@ class TestSession(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     test_id: Mapped[int] = mapped_column(ForeignKey("tests.id", ondelete="CASCADE"), unique=True, index=True)
     time_limit_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    warning_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exam_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    exam_config_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     elapsed_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     warning_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     warning_events_json: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)

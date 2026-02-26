@@ -6,10 +6,10 @@ import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import Button from "@/components/ui/Button";
-import { assetPaths } from "@/src/assets";
-import { generateTest, getSubjects } from "@/lib/api";
+import { generateExamTest, generateTest, getSubjects } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { Difficulty, Language, Mode, Subject } from "@/lib/types";
+import { assetPaths } from "@/src/assets";
 import styles from "@/app/test/test-setup.module.css";
 
 type SubjectIconKey =
@@ -24,6 +24,8 @@ type SubjectIconKey =
   | "chemistry"
   | "informatics"
   | "soon";
+
+type ExamType = "ent" | "ielts";
 
 interface ModeInfo {
   value: Mode;
@@ -44,6 +46,13 @@ interface SubjectCatalogItem {
   available: boolean;
 }
 
+interface ExamCard {
+  key: ExamType;
+  title: string;
+  description: string;
+  icon: string;
+}
+
 const MODES: ModeInfo[] = [
   {
     value: "text",
@@ -62,6 +71,21 @@ const MODES: ModeInfo[] = [
     title: "Устный",
     description: "Режим для устных ответов: вы говорите, а система оценивает ответ.",
     icon: assetPaths.icons.microphone,
+  },
+];
+
+const EXAM_CARDS: ExamCard[] = [
+  {
+    key: "ent",
+    title: "ЕНТ",
+    description: "Национальный экзаменационный режим с фиксированной структурой заданий и таймером.",
+    icon: assetPaths.icons.ent,
+  },
+  {
+    key: "ielts",
+    title: "IELTS",
+    description: "Режим международного экзамена с частями Listening, Reading, Writing и Speaking.",
+    icon: assetPaths.icons.ielts,
   },
 ];
 
@@ -176,6 +200,14 @@ const DIFFICULTIES: Array<{ value: Difficulty; title: string }> = [
 const QUESTION_COUNTS = [5, 10, 15, 20, 25] as const;
 const TIME_LIMIT_OPTIONS = [5, 10, 20, 30, 60] as const;
 
+const ENT_PROFILE_SUBJECTS = [
+  { key: "математика", title: "Математика", iconKey: "math" as const },
+  { key: "физика", title: "Физика", iconKey: "physics" as const },
+  { key: "биология", title: "Биология", iconKey: "biology" as const },
+  { key: "химия", title: "Химия", iconKey: "chemistry" as const },
+  { key: "информатика", title: "Информатика", iconKey: "informatics" as const },
+];
+
 const ICON_BY_SUBJECT: Record<SubjectIconKey, string> = {
   math: assetPaths.icons.math,
   algebra: assetPaths.icons.algebra,
@@ -207,7 +239,12 @@ export default function TestSetupPage() {
   const [mode, setMode] = useState<Mode>("text");
   const [numQuestions, setNumQuestions] = useState(10);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<(typeof TIME_LIMIT_OPTIONS)[number]>(20);
+
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isExamModalOpen, setIsExamModalOpen] = useState(false);
+  const [selectedExamType, setSelectedExamType] = useState<ExamType | null>(null);
+  const [entProfileSubjectId, setEntProfileSubjectId] = useState<number | null>(null);
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -224,25 +261,28 @@ export default function TestSetupPage() {
   }, []);
 
   useEffect(() => {
-    if (!isSettingsModalOpen) return;
+    if (!isSettingsModalOpen && !isExamModalOpen) return;
 
     const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !loading) {
-        setIsSettingsModalOpen(false);
-        setError("");
-        setSubjectId(null);
-      }
+      if (event.key !== "Escape" || loading) return;
+      closeAllModals();
     };
 
     document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
     document.addEventListener("keydown", onKeyDown);
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [isSettingsModalOpen, loading]);
+  }, [isSettingsModalOpen, isExamModalOpen, loading]);
 
   const subjectCatalog = useMemo<SubjectCatalogItem[]>(() => {
     const apiByNormalizedName = new Map<string, Subject>();
@@ -289,17 +329,55 @@ export default function TestSetupPage() {
     return [...catalog, ...extras];
   }, [subjects]);
 
+  const entProfileOptions = useMemo(() => {
+    const lookup = new Map<string, Subject>();
+    for (const subject of subjects) {
+      lookup.set(normalizeSubjectName(subject.name_ru), subject);
+      lookup.set(normalizeSubjectName(subject.name_kz), subject);
+    }
+
+    return ENT_PROFILE_SUBJECTS.map((item) => ({
+      ...item,
+      subject: lookup.get(item.key) || null,
+    })).filter((item) => item.subject !== null);
+  }, [subjects]);
+
+  useEffect(() => {
+    if (entProfileSubjectId) return;
+    const first = entProfileOptions[0]?.subject?.id;
+    if (first) {
+      setEntProfileSubjectId(first);
+    }
+  }, [entProfileOptions, entProfileSubjectId]);
+
   const selectedSubject = useMemo(() => subjects.find((item) => item.id === subjectId) || null, [subjects, subjectId]);
   const selectedSubjectTitle = selectedSubject ? (language === "RU" ? selectedSubject.name_ru : selectedSubject.name_kz) : "";
 
-  const closeSettingsModal = () => {
+  const closeAllModals = () => {
     if (loading) return;
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
     setIsSettingsModalOpen(false);
+    setIsExamModalOpen(false);
+    setSelectedExamType(null);
     setError("");
     setSubjectId(null);
+  };
+
+  const openSubjectSettings = (nextSubjectId: number) => {
+    setError("");
+    setSubjectId(nextSubjectId);
+    setIsExamModalOpen(false);
+    setSelectedExamType(null);
+    setIsSettingsModalOpen(true);
+  };
+
+  const openExamSettings = (examType: ExamType) => {
+    setError("");
+    setSelectedExamType(examType);
+    setIsSettingsModalOpen(false);
+    setIsExamModalOpen(true);
   };
 
   const createTest = async () => {
@@ -327,6 +405,37 @@ export default function TestSetupPage() {
       router.push(`/test/${test.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сгенерировать тест");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createExam = async () => {
+    const token = getToken();
+    if (!token) return;
+    if (!selectedExamType) {
+      setError("Выберите экзамен.");
+      return;
+    }
+
+    if (selectedExamType === "ent" && !entProfileSubjectId) {
+      setError("Для ЕНТ выберите профильный предмет.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const test = await generateExamTest(token, {
+        exam_type: selectedExamType,
+        language,
+        ent_profile_subject_id: selectedExamType === "ent" ? entProfileSubjectId ?? undefined : undefined,
+      });
+
+      router.push(`/test/${test.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось создать экзаменационный тест");
     } finally {
       setLoading(false);
     }
@@ -376,10 +485,7 @@ export default function TestSetupPage() {
                         setError("Этот предмет скоро станет доступен.");
                         return;
                       }
-
-                      setError("");
-                      setSubjectId(item.subject_id);
-                      setIsSettingsModalOpen(true);
+                      openSubjectSettings(item.subject_id);
                     }}
                   >
                     <img className={styles.subjectIcon} src={ICON_BY_SUBJECT[item.iconKey]} alt={title} />
@@ -391,19 +497,41 @@ export default function TestSetupPage() {
                 );
               })}
             </div>
+          </section>
 
-            {error && !isSettingsModalOpen && <div className="errorText">{error}</div>}
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Подготовка к важному</h2>
+              <p className={styles.sectionSubtitle}>Специальные сценарии ЕНТ и IELTS с отдельными правилами прохождения.</p>
+            </div>
 
-            <div className={styles.actions}>
-              <Button variant="secondary" onClick={() => router.push("/history")}>
-                История попыток
-              </Button>
+            <div className={styles.examGrid}>
+              {EXAM_CARDS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={styles.examCard}
+                  onClick={() => openExamSettings(item.key)}
+                >
+                  <img className={styles.examIcon} src={item.icon} alt={item.title} />
+                  <div className={styles.subjectBody}>
+                    <h3 className={styles.subjectTitle}>{item.title}</h3>
+                    <p className={styles.subjectDescription}>{item.description}</p>
+                  </div>
+                </button>
+              ))}
             </div>
           </section>
+
+          {error && !isSettingsModalOpen && !isExamModalOpen && <div className="errorText">{error}</div>}
+
+          <div className={styles.actions}>
+            <Button variant="secondary" onClick={() => router.push("/history")}>История попыток</Button>
+          </div>
         </div>
 
         {isSettingsModalOpen && (
-          <div className={styles.modalOverlay} role="presentation" onClick={closeSettingsModal}>
+          <div className={styles.modalOverlay} role="presentation" onClick={closeAllModals}>
             <section
               className={styles.modal}
               role="dialog"
@@ -505,7 +633,91 @@ export default function TestSetupPage() {
                 <Button disabled={loading || !subjectId} onClick={createTest}>
                   {loading ? "Генерируем тест..." : "Начать тест"}
                 </Button>
-                <Button variant="ghost" onClick={closeSettingsModal}>
+                <Button variant="ghost" onClick={closeAllModals}>
+                  Отмена
+                </Button>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {isExamModalOpen && selectedExamType && (
+          <div className={styles.modalOverlay} role="presentation" onClick={closeAllModals}>
+            <section
+              className={styles.modal}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Настройки экзамена"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <header className={styles.modalHeader}>
+                <h3>{selectedExamType === "ent" ? "ЕНТ" : "IELTS"}</h3>
+                <p>
+                  {selectedExamType === "ent"
+                    ? "Экзаменационный режим: 120 заданий, 240 минут, библиотека вопросов, 1 предупреждение = автозавершение."
+                    : "Экзаменационный режим: Listening (30), Reading (60), Writing (60), Speaking (11-14). 1 предупреждение = автозавершение."}
+                </p>
+              </header>
+
+              <div className={styles.modalBlock}>
+                <span className={styles.settingLabel}>Язык</span>
+                <div className={styles.choiceRow}>
+                  {([
+                    { value: "RU", title: "Русский" },
+                    { value: "KZ", title: "Казахский" },
+                  ] as const).map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      className={`${styles.choiceButton} ${language === item.value ? styles.choiceButtonActive : ""}`}
+                      onClick={() => setLanguage(item.value)}
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {selectedExamType === "ent" && (
+                <>
+                  <div className={styles.modalBlock}>
+                    <span className={styles.settingLabel}>Профильный предмет (1 из 5)</span>
+                    <div className={styles.choiceRow}>
+                      {entProfileOptions.map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          className={`${styles.choiceButton} ${entProfileSubjectId === item.subject?.id ? styles.choiceButtonActive : ""}`}
+                          onClick={() => setEntProfileSubjectId(item.subject?.id || null)}
+                        >
+                          {item.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className={styles.examInfo}>
+                    <p><b>Структура ЕНТ (120):</b> История Казахстана (20), Математическая грамотность (10), Грамотность чтения (10), 2 профильных блока по 40.</p>
+                    <p><b>Оценивание:</b> максимальный балл 140, пороговый балл 50.</p>
+                    <p><b>Таймер:</b> 240 минут с обратным отсчетом.</p>
+                  </div>
+                </>
+              )}
+
+              {selectedExamType === "ielts" && (
+                <div className={styles.examInfo}>
+                  <p><b>Структура IELTS:</b> Listening (30 мин), Reading (60 мин), Writing (60 мин), Speaking (11-14 мин).</p>
+                  <p>Listening/Reading/Writing выполняются подряд, Speaking выделяется отдельно внутри одного теста.</p>
+                </div>
+              )}
+
+              {error && <div className="errorText">{error}</div>}
+
+              <div className={styles.modalActions}>
+                <Button disabled={loading} onClick={createExam}>
+                  {loading ? "Готовим экзамен..." : "Начать экзамен"}
+                </Button>
+                <Button variant="ghost" onClick={closeAllModals}>
                   Отмена
                 </Button>
               </div>

@@ -75,6 +75,12 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.examGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .subjectCard {
   border: none;
   border-radius: 16px;
@@ -89,7 +95,25 @@
   box-shadow: none;
 }
 
+.examCard {
+  border: none;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.14s ease;
+  box-shadow: none;
+}
+
 .subjectCard:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.examCard:hover {
   box-shadow: var(--shadow-soft);
 }
 
@@ -111,6 +135,13 @@
   height: 54px;
   object-fit: contain;
   flex: 0 0 54px;
+}
+
+.examIcon {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  object-fit: contain;
 }
 
 .subjectBody {
@@ -169,6 +200,22 @@
 .modalBlock {
   display: grid;
   gap: 12px;
+}
+
+.examInfo {
+  display: grid;
+  gap: 8px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #f7f7fb;
+}
+
+.examInfo p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 350;
 }
 
 .actions {
@@ -235,7 +282,8 @@
 
 @media (max-width: 1100px) {
   .modeGrid,
-  .subjectGrid {
+  .subjectGrid,
+  .examGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -250,19 +298,65 @@
     text-align: left;
   }
 
+  .sectionTitle {
+    font-size: 20px;
+  }
+
+  .sectionSubtitle {
+    font-size: 14px;
+  }
+
   .modeGrid,
-  .subjectGrid {
+  .subjectGrid,
+  .examGrid {
     grid-template-columns: 1fr;
     gap: 12px;
   }
 
+  .modeItem {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+  }
+
+  .modeItem > div {
+    display: grid;
+    gap: 4px;
+    justify-items: center;
+  }
+
+  .modeIcon {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+  }
+
+  .modeTitle {
+    font-size: 14px;
+  }
+
+  .modeText {
+    margin: 0;
+    font-size: 12px;
+  }
+
+  .subjectTitle {
+    font-size: 14px;
+  }
+
+  .subjectDescription {
+    font-size: 12px;
+  }
+
   .settingLabel {
-    font-size: 16px;
+    font-size: 14px;
   }
 
   .choiceButton {
     min-width: 90px;
     padding: 10px 14px;
+    font-size: 14px;
   }
 
   .modal {
@@ -273,7 +367,15 @@
   }
 
   .modalHeader h3 {
-    font-size: 24px;
+    font-size: 20px;
+  }
+
+  .modalHeader p {
+    font-size: 14px;
+  }
+
+  .examInfo p {
+    font-size: 12px;
   }
 
   .modalActions {

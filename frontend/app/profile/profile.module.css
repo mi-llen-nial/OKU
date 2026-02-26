@@ -1,0 +1,172 @@
+.page {
+  width: 100%;
+  max-width: 1120px;
+  min-width: 0;
+  margin: 0 auto;
+  display: grid;
+  gap: 32px;
+  padding-bottom: 56px;
+}
+
+.section {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.header {
+  display: grid;
+  gap: 8px;
+}
+
+.header h2,
+.header h3 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.header p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 16px;
+  font-weight: 350;
+}
+
+.infoGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.infoCard {
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.infoCard h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.infoCard p {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.invitationList {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.invitationCard {
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.invitationMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.teacherName {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.invitationDate {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.status {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pending {
+  color: #a28f09;
+}
+
+.accepted {
+  color: #188146;
+}
+
+.declined {
+  color: #bf1f39;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.actions > * {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .infoGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    gap: 24px;
+    padding-bottom: 36px;
+  }
+
+  .section {
+    gap: 12px;
+  }
+
+  .header h2,
+  .header h3 {
+    font-size: 20px;
+  }
+
+  .header p,
+  .infoCard h3,
+  .teacherName {
+    font-size: 14px;
+  }
+
+  .infoCard p,
+  .invitationDate,
+  .status {
+    font-size: 12px;
+  }
+
+  .infoCard,
+  .invitationCard {
+    padding: 14px;
+  }
+
+  .actions > * {
+    flex: 1 1 100%;
+  }
+}

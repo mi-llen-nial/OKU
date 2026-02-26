@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
+from app.api.profile import router as profile_router
 from app.api.students import router as students_router
 from app.api.subjects import router as subjects_router
 from app.api.teacher import router as teacher_router
@@ -47,3 +48,4 @@ app.include_router(subjects_router, prefix=settings.api_prefix)
 app.include_router(tests_router, prefix=settings.api_prefix)
 app.include_router(students_router, prefix=settings.api_prefix)
 app.include_router(teacher_router, prefix=settings.api_prefix)
+app.include_router(profile_router, prefix=settings.api_prefix)

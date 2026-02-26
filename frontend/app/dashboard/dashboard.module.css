@@ -244,6 +244,37 @@
     gap: 80px;
   }
 
+  .sectionTitle {
+    font-size: 20px;
+  }
+
+  .sectionSubtitle,
+  .cardMeta,
+  .linkButton,
+  .showAllButton,
+  .emptyText,
+  .footer {
+    font-size: 14px;
+  }
+
+  .statLabel,
+  .cardTitle,
+  .cardActions button:first-child {
+    font-size: 14px;
+  }
+
+  .cardDate {
+    font-size: 12px;
+  }
+
+  .statMeta {
+    font-size: 12px;
+  }
+
+  .scoreValue {
+    font-size: 14px;
+  }
+
   .statsRow,
   .cardGrid {
     grid-template-columns: 1fr;

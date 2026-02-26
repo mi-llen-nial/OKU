@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -20,7 +20,7 @@ class GenerateTestRequest(BaseModel):
         if value is None:
             return value
         if value not in {5, 10, 20, 30, 60}:
-            raise ValueError("time_limit_minutes must be one of: 5, 10, 20, 30, 60")
+            raise ValueError("time_limit_minutes должен быть одним из значений: 5, 10, 20, 30, 60")
         return value
 
 
@@ -29,6 +29,12 @@ class GenerateMistakesTestRequest(BaseModel):
     difficulty: DifficultyLevel = DifficultyLevel.medium
     language: PreferredLanguage | None = None
     num_questions: int = Field(default=10, ge=1, le=30)
+
+
+class GenerateExamTestRequest(BaseModel):
+    exam_type: Literal["ent", "ielts"]
+    language: PreferredLanguage = PreferredLanguage.ru
+    ent_profile_subject_id: int | None = None
 
 
 class GeneratedQuestionPayload(BaseModel):
@@ -63,6 +69,9 @@ class TestResponse(BaseModel):
     language: PreferredLanguage
     mode: TestMode
     time_limit_seconds: int | None = None
+    warning_limit: int | None = None
+    exam_kind: str | None = None
+    exam_config_json: dict[str, Any] | None = None
     created_at: datetime
     questions: list[QuestionResponse]
 
@@ -138,6 +147,7 @@ class HistoryItemResponse(BaseModel):
     test_id: int
     subject_id: int
     subject_name: str
+    exam_kind: str | None = None
     difficulty: DifficultyLevel
     language: PreferredLanguage
     mode: TestMode
