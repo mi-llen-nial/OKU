@@ -1,7 +1,6 @@
 .frame {
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: block;
 }
 
 .sidebar {
@@ -12,9 +11,13 @@
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   gap: 12px;
-  position: sticky;
+  position: fixed;
+  left: 0;
   top: 0;
-  max-height: 100vh;
+  bottom: 0;
+  z-index: 15;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .sidebarCollapsed {
@@ -104,6 +107,12 @@
 
 .main {
   min-width: 0;
+  margin-left: 248px;
+  min-height: 100vh;
+}
+
+.sidebarCollapsed ~ .main {
+  margin-left: 82px;
 }
 
 .topbar {
@@ -268,7 +277,7 @@
 
 @media (max-width: 1024px) {
   .frame {
-    grid-template-columns: 1fr;
+    display: block;
   }
 
   .sidebar {
@@ -288,8 +297,22 @@
   }
 
   .topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
     justify-content: flex-start;
     padding: 10px 14px;
+  }
+
+  .main {
+    margin-left: 0 !important;
+    width: 100%;
+    padding-top: 58px;
+  }
+
+  .sidebarCollapsed ~ .main {
+    margin-left: 0;
   }
 
   .topbarRight {
@@ -327,6 +350,12 @@
 @media (max-width: 420px) {
   .topbar {
     padding: 8px 12px;
+  }
+
+  .main {
+    padding-top: 54px;
+    margin-left: 0 !important;
+    width: 100%;
   }
 
   .topbarTitle h1 {

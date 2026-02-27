@@ -1839,6 +1839,21 @@ Seed уникальности: {seed}
             oral=True,
         )
 
+    def _build_short_text_source_answer(
+        self,
+        *,
+        question: GeneratedQuestionPayload,
+        topic: str,
+        language: PreferredLanguage,
+    ) -> dict[str, Any]:
+        if question.type in {QuestionType.single_choice, QuestionType.multi_choice}:
+            return self._build_oral_source_answer_from_choice(
+                question=question,
+                topic=topic,
+                language=language,
+            )
+        return dict(question.correct_answer_json or {})
+
     def _build_oral_source_answer_from_choice(
         self,
         *,
@@ -2056,12 +2071,17 @@ Seed уникальности: {seed}
 
             if qtype == QuestionType.short_text and base_question.type != QuestionType.short_text:
                 topic_value = str((base_question.explanation_json or {}).get("topic", "")).strip() or topic
+                source_answer_json = self._build_short_text_source_answer(
+                    question=base_question,
+                    topic=topic_value,
+                    language=language,
+                )
                 return self._make_short_text_question(
                     prompt=base_question.prompt,
                     topic=topic_value,
                     explanation_json=base_question.explanation_json,
                     language=language,
-                    source_correct_answer_json=base_question.correct_answer_json,
+                    source_correct_answer_json=source_answer_json,
                     oral=False,
                 )
             if qtype == QuestionType.oral_answer:
@@ -2278,13 +2298,18 @@ Seed уникальности: {seed}
                         tts_text=tts_text,
                     )
             else:
+                source_answer_json = self._build_short_text_source_answer(
+                    question=question,
+                    topic=topic,
+                    language=language,
+                )
                 normalized = self._make_short_text_question(
                     prompt=prompt,
                     topic=topic,
                     explanation_json={"topic": topic, "correct_explanation": explanation_text, **extra_explanation},
                     language=language,
                     tts_text=tts_text,
-                    source_correct_answer_json=question.correct_answer_json,
+                    source_correct_answer_json=source_answer_json,
                     oral=(qtype == QuestionType.oral_answer),
                 )
 
@@ -2433,11 +2458,17 @@ Seed уникальности: {seed}
             topic = str(question.explanation_json.get("topic", "")).strip() or (
                 "Причинно-следственный анализ" if language == PreferredLanguage.ru else "Себеп-салдар талдауы"
             )
+            source_answer_json = self._build_short_text_source_answer(
+                question=question,
+                topic=topic,
+                language=language,
+            )
             questions[index] = self._make_short_text_question(
                 prompt=question.prompt,
                 topic=topic,
                 explanation_json=question.explanation_json,
                 language=language,
+                source_correct_answer_json=source_answer_json,
             )
             current_short_questions += 1
 

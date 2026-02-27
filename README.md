@@ -2,6 +2,7 @@
 
 OKU — персонализированная система экзаменов (RU/KZ) с AI-генерацией уникальных тестов, авто-проверкой, рекомендациями по слабым темам и teacher-аналитикой
 
+
 ## Stack
 - Backend: FastAPI + SQLAlchemy + JWT
 - DB: PostgreSQL
@@ -221,3 +222,7 @@ open mobile/ios/Runner.xcworkspace
 1. Добавьте файл в `frontend/public/assets/icons` или `frontend/public/assets/images`
 2. Зарегистрируйте путь в `frontend/src/assets/index.ts`
 3. Используйте путь из реестра в компонентах/страницах
+
+
+
+-нужно чтобы ты собрал docker compose, чтобы там собирался фронт, бэк, бд и тд.Чтобы можно было задплоить просто н

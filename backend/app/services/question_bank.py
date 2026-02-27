@@ -882,9 +882,9 @@ SUBJECT_FACT_BANK: dict[str, list[dict[str, Any]]] = {
         _fact(
             topic_ru="Среднее арифметическое",
             prompt_ru="Найдите среднее арифметическое чисел 4, 6 и 10.",
-            options_ru=["6", "6.5", "7", "8"],
+            options_ru=["6", "20/3", "7", "8"],
             correct_option_id=1,
-            explanation_ru="(4 + 6 + 10) / 3 = 20 / 3 ≈ 6.67, ближайший вариант 6.5.",
+            explanation_ru="(4 + 6 + 10) / 3 = 20 / 3 ≈ 6.67.",
         ),
         _fact(
             topic_ru="Дроби и проценты",
