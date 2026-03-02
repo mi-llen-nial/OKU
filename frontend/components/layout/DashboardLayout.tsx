@@ -4,10 +4,12 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Bolt,
+  ClipboardPenLine,
   BookOpenCheck,
   ChartSpline,
   Clock3,
   LayoutGrid,
+  ListChecks,
   LogOut,
   Menu,
   Moon,
@@ -37,15 +39,23 @@ interface NavItem {
   icon: ReactNode;
 }
 
+function getInitialSidebarCollapsed() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+}
+
 function getPageTitle(pathname: string, role: string | undefined, language: Language) {
   if (pathname.startsWith("/dashboard")) return tr(language, "Главная", "Басты бет");
   if (pathname.startsWith("/test")) return tr(language, "Тесты", "Тесттер");
+  if (pathname.startsWith("/my-group")) return tr(language, "Моя группа", "Менің тобым");
   if (pathname.startsWith("/blitz")) return tr(language, "Блиц", "Блиц");
   if (pathname.startsWith("/results")) return tr(language, "Результаты", "Нәтижелер");
   if (pathname.startsWith("/history")) return tr(language, "История", "Тарих");
   if (pathname.startsWith("/progress")) return tr(language, "Аналитика", "Аналитика");
   if (pathname.startsWith("/teacher/groups")) return tr(language, "Группа", "Топ");
   if (pathname.startsWith("/teacher/students")) return tr(language, "Аналитика студента", "Оқушы аналитикасы");
+  if (pathname.startsWith("/teacher/create-test")) return tr(language, "Создать тест", "Тест құру");
+  if (pathname.startsWith("/teacher/tests")) return tr(language, "Мои тесты", "Менің тесттерім");
   if (pathname === "/teacher") return tr(language, "Группы", "Топтар");
   if (pathname.startsWith("/profile")) return tr(language, "Профиль", "Профиль");
   return role === "teacher" ? tr(language, "Группы", "Топтар") : "OKU";
@@ -56,16 +66,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const user = getUser();
 
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(getInitialSidebarCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
   const uiLanguage = useUiLanguage();
 
   useEffect(() => {
-    const saved = localStorage.getItem(SIDEBAR_STORAGE_KEY);
-    if (saved === "1") {
-      setCollapsed(true);
-    }
-
     const savedLang = localStorage.getItem(UI_LANG_STORAGE_KEY);
     if (savedLang === "RU" || savedLang === "KZ") {
       setLanguagePreference(savedLang);
@@ -86,6 +91,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           label: t("Группы", "Топтар"),
           icon: <Users size={18} />,
         },
+        {
+          href: "/teacher/create-test",
+          label: t("Создать тест", "Тест құру"),
+          icon: <ClipboardPenLine size={18} />,
+        },
+        {
+          href: "/teacher/tests",
+          label: t("Мои тесты", "Менің тесттерім"),
+          icon: <ListChecks size={18} />,
+        },
       ];
     }
 
@@ -99,6 +114,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         href: "/test",
         label: t("Тест", "Тест"),
         icon: <BookOpenCheck size={18} />,
+      },
+      {
+        href: "/my-group",
+        label: t("Моя группа", "Менің тобым"),
+        icon: <Users size={18} />,
       },
       {
         href: "/blitz",
@@ -121,6 +141,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const isActive = (href: string) => {
     if (href === "/teacher") {
       return pathname === "/teacher" || pathname.startsWith("/teacher/groups/") || pathname.startsWith("/teacher/students/");
+    }
+    if (href === "/teacher/create-test") {
+      return pathname.startsWith("/teacher/create-test");
+    }
+    if (href === "/teacher/tests") {
+      return pathname.startsWith("/teacher/tests");
     }
     if (href === "/test") {
       return pathname.startsWith("/test") || pathname.startsWith("/results");

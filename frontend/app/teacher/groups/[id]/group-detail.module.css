@@ -20,6 +20,30 @@
   font-weight: 600;
 }
 
+.groupTitleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.groupSettingsButton {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.groupSettingsIcon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
 .header p {
   margin: 0;
   font-size: 16px;
@@ -124,6 +148,11 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .invitationCard p {
@@ -131,6 +160,11 @@
   color: var(--ink-muted);
   font-size: 16px;
   font-weight: 350;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .invitationMinus {
@@ -259,6 +293,33 @@
   width: 100%;
 }
 
+.deleteGroupAction {
+  border: 0;
+  background: transparent;
+  color: #bf1f39;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  padding: 0;
+}
+
+.deleteGroupAction img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.deleteGroupAction:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .actionColumn {
   width: 120px;
 }
@@ -358,6 +419,16 @@
   .header h2,
   .modal h3 {
     font-size: 20px;
+  }
+
+  .groupSettingsButton {
+    width: 22px;
+    height: 22px;
+  }
+
+  .groupSettingsIcon {
+    width: 18px;
+    height: 18px;
   }
 
   .header p,

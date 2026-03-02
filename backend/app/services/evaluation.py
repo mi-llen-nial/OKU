@@ -410,14 +410,41 @@ def _answer_matches_number(student_text: str, expected: float) -> bool:
 def _infer_expected_numeric_from_prompt(prompt: str) -> float | None:
     normalized = prompt.lower()
     if "среднее арифметическ" in normalized:
-        values = _extract_numbers(prompt)
+        values = _extract_numbers_after_marker(
+            text=prompt,
+            markers=["среднее арифметическое чисел", "среднее арифметическое", "орташа арифметикалық"],
+        )
+        if len(values) < 2:
+            values = _extract_numbers(prompt)
         if len(values) >= 2:
             return sum(values) / len(values)
     if "периметр квадрата" in normalized and ("сторон" in normalized or "қабыр" in normalized):
+        side_match = re.search(r"сторон[а-я]*\s*(-?\d+(?:[.,]\d+)?)", normalized)
+        if not side_match:
+            side_match = re.search(r"қабырғ[а-я]*\s*(-?\d+(?:[.,]\d+)?)", normalized)
+        if side_match:
+            try:
+                return float(side_match.group(1).replace(",", ".")) * 4
+            except ValueError:
+                return None
         values = _extract_numbers(prompt)
         if values:
-            return values[0] * 4
+            return values[-1] * 4
     return None
+
+
+def _extract_numbers_after_marker(*, text: str, markers: list[str]) -> list[float]:
+    lowered = text.lower()
+    for marker in markers:
+        idx = lowered.find(marker)
+        if idx < 0:
+            continue
+        fragment = text[idx + len(marker):]
+        fragment = re.split(r"[.?!\n]", fragment, maxsplit=1)[0]
+        values = _extract_numbers(fragment)
+        if values:
+            return values
+    return []
 
 
 def _discriminant_rule_score(*, prompt: str, student_text: str) -> float:
@@ -452,11 +479,11 @@ def _infer_formula_targets_from_prompt(prompt: str) -> list[str]:
     normalized = prompt.lower().replace(" ", "")
     targets: list[str] = []
 
-    if "(a^m)^n" in normalized or "a^m)^n" in normalized:
+    if re.search(r"\(?a\^m\)?\^n", normalized):
         targets.extend(["a^(mn)", "a^mn", "a^(m*n)", "a^m*n"])
-    if "a^m*a^n" in normalized:
+    if re.search(r"a\^m[\*x×]a\^n", normalized):
         targets.extend(["a^(m+n)", "a^m+n"])
-    if "a^m/a^n" in normalized or "a^m:a^n" in normalized:
+    if re.search(r"a\^m[/:]a\^n", normalized):
         targets.extend(["a^(m-n)", "a^m-n"])
     return targets
 

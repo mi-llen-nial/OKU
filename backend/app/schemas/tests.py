@@ -182,3 +182,15 @@ class StudentProgressResponse(BaseModel):
 class StudentDashboardResponse(BaseModel):
     progress: StudentProgressResponse
     history: list[HistoryItemResponse]
+
+
+class GroupTestSummaryResponse(BaseModel):
+    custom_test_id: int
+    title: str
+    questions_count: int
+    duration_minutes: int
+    warning_limit: int
+    teacher_name: str
+    group_id: int
+    group_name: str
+    created_at: datetime

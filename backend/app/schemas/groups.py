@@ -22,6 +22,10 @@ class TeacherGroupCreateResponse(BaseModel):
     members_count: int
 
 
+class TeacherGroupUpdateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+
+
 class GroupMemberResponse(BaseModel):
     student_id: int
     username: str

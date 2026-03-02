@@ -9,10 +9,12 @@ import AuthGuard from "@/components/AuthGuard";
 import Button from "@/components/ui/Button";
 import {
   cancelTeacherInvitation,
+  deleteTeacherGroup,
   getTeacherGroupMembers,
   getTeacherInvitations,
   removeTeacherGroupMember,
   sendTeacherInvitation,
+  updateTeacherGroup,
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { tr, useUiLanguage } from "@/lib/i18n";
@@ -47,6 +49,10 @@ export default function TeacherGroupDetailPage() {
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [inviteUsername, setInviteUsername] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [settingsName, setSettingsName] = useState("");
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [deleteGroupLoading, setDeleteGroupLoading] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState<{ studentId: number; name: string } | null>(null);
   const [removeLoading, setRemoveLoading] = useState(false);
   const [cancelingInvitationId, setCancelingInvitationId] = useState<number | null>(null);
@@ -64,7 +70,7 @@ export default function TeacherGroupDetailPage() {
     const token = getToken();
     if (!token || !Number.isFinite(groupId)) return;
 
-    if (!silent) {
+    if (!silent && !group) {
       setLoading(true);
     }
     try {
@@ -166,13 +172,76 @@ export default function TeacherGroupDetailPage() {
     }
   };
 
+  const openSettings = () => {
+    setSettingsName(group?.name || "");
+    setSettingsModalOpen(true);
+  };
+
+  const saveSettings = async () => {
+    const token = getToken();
+    if (!token || !Number.isFinite(groupId) || !group) return;
+
+    const nextName = settingsName.trim();
+    if (!nextName) {
+      setError(t("Введите название группы.", "Топ атауын енгізіңіз."));
+      return;
+    }
+
+    if (nextName === group.name) {
+      setSettingsModalOpen(false);
+      return;
+    }
+
+    try {
+      setSettingsLoading(true);
+      setError("");
+      setSuccess("");
+      const payload = await updateTeacherGroup(token, groupId, { name: nextName });
+      setGroup((prev) => (prev ? { ...prev, name: payload.name } : prev));
+      setSuccess(t("Название группы обновлено.", "Топ атауы жаңартылды."));
+      setSettingsModalOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("Не удалось обновить группу", "Топты жаңарту мүмкін болмады"));
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const removeGroup = async () => {
+    const token = getToken();
+    if (!token || !Number.isFinite(groupId)) return;
+
+    try {
+      setDeleteGroupLoading(true);
+      setError("");
+      setSuccess("");
+      await deleteTeacherGroup(token, groupId);
+      setSettingsModalOpen(false);
+      router.push("/teacher");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("Не удалось удалить группу", "Топты жою мүмкін болмады"));
+    } finally {
+      setDeleteGroupLoading(false);
+    }
+  };
+
   return (
     <AuthGuard roles={["teacher"]}>
       <AppShell>
         <div className={styles.page}>
           <header className={styles.header}>
             <div>
-              <h2>{group?.name || t("Группа", "Топ")}</h2>
+              <div className={styles.groupTitleRow}>
+                <h2>{group?.name || t("Группа", "Топ")}</h2>
+                <button
+                  type="button"
+                  className={styles.groupSettingsButton}
+                  onClick={openSettings}
+                  aria-label={t("Настройки группы", "Топ баптаулары")}
+                >
+                  <img className={styles.groupSettingsIcon} src={assetPaths.icons.groupEdit} alt="" aria-hidden="true" />
+                </button>
+              </div>
               <p>{t("Список участников и быстрый переход к аналитике ученика.", "Қатысушылар тізімі және оқушы аналитикасына жылдам өту.")}</p>
             </div>
             <Button onClick={() => setInviteModalOpen(true)} disabled={groupFull} className={styles.actionButton}>
@@ -285,6 +354,47 @@ export default function TeacherGroupDetailPage() {
             )}
           </section>
         </div>
+
+        {settingsModalOpen && (
+          <div className={styles.modalOverlay} onClick={() => setSettingsModalOpen(false)} role="presentation">
+            <section className={styles.modal} onClick={(event) => event.stopPropagation()}>
+              <button
+                type="button"
+                className={styles.close}
+                onClick={() => setSettingsModalOpen(false)}
+                aria-label={t("Закрыть", "Жабу")}
+              >
+                <X size={16} />
+              </button>
+              <h3>{t("Настройки группы", "Топ баптаулары")}</h3>
+              <label>
+                {t("Переименовать", "Атын өзгерту")}
+                <input
+                  maxLength={120}
+                  value={settingsName}
+                  onChange={(event) => setSettingsName(event.target.value)}
+                />
+              </label>
+              <div className={styles.modalActions}>
+                <Button block onClick={saveSettings} disabled={settingsLoading || deleteGroupLoading}>
+                  {settingsLoading ? t("Сохраняем...", "Сақталуда...") : t("Готово", "Дайын")}
+                </Button>
+                <Button block variant="ghost" onClick={() => setSettingsModalOpen(false)} disabled={settingsLoading || deleteGroupLoading}>
+                  {t("Отмена", "Бас тарту")}
+                </Button>
+              </div>
+              <button
+                type="button"
+                className={styles.deleteGroupAction}
+                onClick={removeGroup}
+                disabled={settingsLoading || deleteGroupLoading}
+              >
+                <img src={assetPaths.icons.groupDelete} alt="" aria-hidden="true" />
+                <span>{deleteGroupLoading ? t("Удаляем...", "Жойылуда...") : t("Удалить группу", "Топты жою")}</span>
+              </button>
+            </section>
+          </div>
+        )}
 
         {inviteModalOpen && (
           <div className={styles.modalOverlay} onClick={() => setInviteModalOpen(false)} role="presentation">

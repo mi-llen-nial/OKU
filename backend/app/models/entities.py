@@ -75,6 +75,10 @@ class User(Base):
     tests: Mapped[list[Test]] = relationship(back_populates="student", cascade="all, delete-orphan")
     memberships: Mapped[list[GroupMembership]] = relationship(back_populates="student", cascade="all, delete-orphan")
     groups_created: Mapped[list[Group]] = relationship(back_populates="teacher")
+    custom_tests_created: Mapped[list[TeacherAuthoredTest]] = relationship(
+        back_populates="teacher",
+        cascade="all, delete-orphan",
+    )
     sent_invitations: Mapped[list[GroupInvitation]] = relationship(
         back_populates="teacher",
         foreign_keys="GroupInvitation.teacher_id",
@@ -115,6 +119,10 @@ class Group(Base):
     memberships: Mapped[list[GroupMembership]] = relationship(back_populates="group", cascade="all, delete-orphan")
     teacher: Mapped[User | None] = relationship(back_populates="groups_created")
     invitations: Mapped[list[GroupInvitation]] = relationship(back_populates="group")
+    custom_test_links: Mapped[list[TeacherAuthoredTestGroup]] = relationship(
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
 
 
 class GroupMembership(Base):
@@ -143,6 +151,76 @@ class GroupInvitation(Base):
     teacher: Mapped[User] = relationship(back_populates="sent_invitations", foreign_keys=[teacher_id])
     student: Mapped[User] = relationship(back_populates="received_invitations", foreign_keys=[student_id])
     group: Mapped[Group | None] = relationship(back_populates="invitations")
+
+
+class TeacherAuthoredTestGroup(Base):
+    __tablename__ = "teacher_authored_test_groups"
+    __table_args__ = (
+        UniqueConstraint("test_id", "group_id", name="uq_teacher_authored_test_group"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    test_id: Mapped[int] = mapped_column(
+        ForeignKey("teacher_authored_tests.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("groups.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+
+    test: Mapped[TeacherAuthoredTest] = relationship(back_populates="group_links")
+    group: Mapped[Group] = relationship(back_populates="custom_test_links")
+
+
+class TeacherAuthoredTest(Base):
+    __tablename__ = "teacher_authored_tests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    time_limit_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    warning_limit: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    teacher: Mapped[User] = relationship(back_populates="custom_tests_created")
+    group_links: Mapped[list[TeacherAuthoredTestGroup]] = relationship(
+        back_populates="test",
+        cascade="all, delete-orphan",
+    )
+    questions: Mapped[list[TeacherAuthoredQuestion]] = relationship(
+        back_populates="test",
+        cascade="all, delete-orphan",
+        order_by="TeacherAuthoredQuestion.order_index.asc()",
+    )
+
+
+class TeacherAuthoredQuestion(Base):
+    __tablename__ = "teacher_authored_questions"
+    __table_args__ = (
+        UniqueConstraint("test_id", "order_index", name="uq_teacher_authored_question_order"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    test_id: Mapped[int] = mapped_column(
+        ForeignKey("teacher_authored_tests.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    question_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    options_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    correct_answer_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    test: Mapped[TeacherAuthoredTest] = relationship(back_populates="questions")
 
 
 class StudentProfile(Base):

@@ -1,5 +1,5 @@
-const ICONS_VERSION = "20260226-1";
-const ILLUSTRATIONS_VERSION = "20260301-1";
+const ICONS_VERSION = "20260302-1";
+const ILLUSTRATIONS_VERSION = "20260301-2";
 
 export const assetPaths = {
   logo: {
@@ -33,6 +33,8 @@ export const assetPaths = {
     soon: `/assets/icons/solar_server-square-update-outline.svg?v=${ICONS_VERSION}`,
     group: `/assets/icons/material-symbols_group-rounded.svg?v=${ICONS_VERSION}`,
     student: `/assets/icons/material-symbols_group-rounded-1.svg?v=${ICONS_VERSION}`,
+    groupEdit: `/assets/icons/cuida_edit-outline.svg?v=${ICONS_VERSION}`,
+    groupDelete: `/assets/icons/mdi_trash.svg?v=${ICONS_VERSION}`,
   },
   images: {
     parchment: "/assets/images/bg-parchment.svg",
@@ -44,8 +46,8 @@ export const assetPaths = {
     owl: `/assets/illustrations/illus-owl.svg?v=${ILLUSTRATIONS_VERSION}`,
     constellation: `/assets/illustrations/illus-constellation.svg?v=${ILLUSTRATIONS_VERSION}`,
     landingBooks: `/assets/illustrations/Untitled%201.png?v=${ILLUSTRATIONS_VERSION}`,
-    landingSubjects: `/assets/illustrations/gsfdkgsf%201.png?v=${ILLUSTRATIONS_VERSION}`,
-    landingPrep: `/assets/illustrations/iconsfsad%201.png?v=${ILLUSTRATIONS_VERSION}`,
+    landingSubjects: `/assets/illustrations/iconsfsad%201.png?v=${ILLUSTRATIONS_VERSION}`,
+    landingPrep: `/assets/illustrations/gsfdkgsf%201.png?v=${ILLUSTRATIONS_VERSION}`,
     landingTeacher: `/assets/illustrations/teacher%201.png?v=${ILLUSTRATIONS_VERSION}`,
   },
   audio: {

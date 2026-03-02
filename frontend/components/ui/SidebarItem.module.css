@@ -7,7 +7,7 @@
   border: 1px solid transparent;
   color: var(--ink-muted);
   padding: 9px 10px;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, gap 0.2s ease;
 }
 
 .link:hover {
@@ -30,13 +30,25 @@
 }
 
 .label {
+  display: inline-block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 600;
   font-size: 0.9rem;
+  max-width: 170px;
+  opacity: 1;
+  transform: translateX(0);
+  transition: max-width 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.collapsed {
+  gap: 0;
+  justify-content: center;
 }
 
 .collapsed .label {
-  display: none;
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-4px);
 }

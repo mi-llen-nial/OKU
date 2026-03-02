@@ -38,6 +38,7 @@ export default function TeacherGroupsPage() {
   const [groups, setGroups] = useState<TeacherGroup[]>([]);
   const [attention, setAttention] = useState<AttentionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [attentionLoading, setAttentionLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -52,11 +53,19 @@ export default function TeacherGroupsPage() {
     (async () => {
       try {
         setLoading(true);
+        setAttentionLoading(true);
         setError("");
         setSuccess("");
         const groupsPayload = await getTeacherGroups(token);
         if (cancelled) return;
         setGroups(groupsPayload);
+        setLoading(false);
+
+        if (groupsPayload.length === 0) {
+          setAttention([]);
+          setAttentionLoading(false);
+          return;
+        }
 
         const membersPayload = await Promise.all(
           groupsPayload.map(async (group) => ({
@@ -79,14 +88,15 @@ export default function TeacherGroupsPage() {
           }
         }
         items.sort((left, right) => right.warnings_count - left.warnings_count);
-          setAttention(items.slice(0, 3));
-        } catch (err) {
-          if (!cancelled) {
-            setError(err instanceof Error ? err.message : t("Не удалось загрузить группы", "Топтарды жүктеу мүмкін болмады"));
-          }
-        } finally {
+        setAttention(items.slice(0, 3));
+      } catch (err) {
         if (!cancelled) {
+          setError(err instanceof Error ? err.message : t("Не удалось загрузить группы", "Топтарды жүктеу мүмкін болмады"));
           setLoading(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setAttentionLoading(false);
         }
       }
     })();
@@ -164,32 +174,41 @@ export default function TeacherGroupsPage() {
 
           <section className={styles.section}>
             <header className={styles.sectionHeader}>
-              <h2 className={styles.title}>{t("Требует внимания", "Назар аударуды қажет етеді")}</h2>
-              <p className={styles.subtitle}>{t("Основаны на тестах и результатах учеников", "Оқушылардың тесттері мен нәтижелері негізінде")}</p>
+              <div>
+                <h2 className={styles.title}>{t("Требует внимания", "Назар аударуды қажет етеді")}</h2>
+                <p className={styles.subtitle}>
+                  {t("Основаны на тестах и результатах учеников", "Оқушылардың тесттері мен нәтижелері негізінде")}
+                </p>
+              </div>
             </header>
 
             {error && <div className="errorText">{error}</div>}
 
-            <div className={styles.attentionGrid}>
-              {attention.map((item) => (
-                <article className={styles.attentionCard} key={item.student_id}>
-                  <p className={styles.warning}>+{item.warnings_count} {t("предупреждений", "ескерту")}</p>
-                  <div className={styles.studentRow}>
-                    <img className={styles.studentIcon} src={assetPaths.icons.student} alt={t("Ученик", "Оқушы")} />
-                    <div>
-                      <h3>{item.student_name}</h3>
-                      <p>{item.group_name}</p>
+            {!attentionLoading && (
+              <div className={styles.attentionGrid}>
+                {attention.map((item) => (
+                  <article className={styles.attentionCard} key={item.student_id}>
+                    <p className={styles.warning}>+{item.warnings_count} {t("предупреждений", "ескерту")}</p>
+                    <div className={styles.studentRow}>
+                      <img className={styles.studentIcon} src={assetPaths.icons.student} alt={t("Ученик", "Оқушы")} />
+                      <div>
+                        <h3>{item.student_name}</h3>
+                        <p>{item.group_name}</p>
+                      </div>
                     </div>
-                  </div>
-                  <Button block onClick={() => router.push(buildStudentAnalyticsHref(item.student_id, item.student_name))}>
-                    {t("Открыть", "Ашу")}
-                  </Button>
-                </article>
-              ))}
-            </div>
+                    <Button block onClick={() => router.push(buildStudentAnalyticsHref(item.student_id, item.student_name))}>
+                      {t("Открыть", "Ашу")}
+                    </Button>
+                  </article>
+                ))}
+              </div>
+            )}
 
-            {attention.length === 0 && !loading && (
+            {attention.length === 0 && !loading && !attentionLoading && (
               <p className="muted">{t("Пока нет учеников с предупреждениями.", "Ескертулері бар оқушылар әзірге жоқ.")}</p>
+            )}
+            {attentionLoading && (
+              <p className="muted">{t("Загрузка...", "Жүктелуде...")}</p>
             )}
           </section>
 

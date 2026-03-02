@@ -13,19 +13,22 @@
 }
 
 .sectionHeader {
+  position: relative;
   text-align: center;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  justify-items: center;
+  align-items: flex-start;
   gap: 12px;
 }
 
 .sectionHeader > div {
-  justify-self: center;
+  text-align: center;
 }
 
 .sectionHeader > button {
-  justify-self: end;
+  position: absolute;
+  right: 0;
+  top: 0;
 }
 
 .actionButton {
@@ -101,6 +104,11 @@
   font-size: 16px;
   line-height: 1.2;
   font-weight: 600;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .groupBody p {
@@ -108,6 +116,11 @@
   color: var(--ink-muted);
   font-size: 16px;
   font-weight: 350;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .attentionGrid {
@@ -142,6 +155,11 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .studentRow p {
@@ -149,6 +167,11 @@
   font-size: 16px;
   color: var(--ink-muted);
   font-weight: 350;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .emptyState {
@@ -240,12 +263,12 @@
 
 @media (max-width: 1024px) {
   .sectionHeader {
-    grid-template-columns: 1fr;
+    display: grid;
     justify-items: center;
   }
 
   .sectionHeader > button {
-    justify-self: center;
+    position: static;
   }
 
   .groupsGrid,

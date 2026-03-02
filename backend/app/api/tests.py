@@ -15,6 +15,7 @@ from app.core.deps import CurrentUser, DBSession, require_role
 from app.models import (
     Answer,
     DifficultyLevel,
+    GroupMembership,
     PreferredLanguage,
     Question,
     QuestionType,
@@ -22,8 +23,11 @@ from app.models import (
     Result,
     Subject,
     Test,
+    TeacherAuthoredTest,
+    TeacherAuthoredTestGroup,
     TestMode,
     TestSession,
+    StudentProfile,
     User,
     UserRole,
 )
@@ -123,6 +127,93 @@ def generate_test(
     db.commit()
     db.refresh(test)
 
+    return _build_test_response(test)
+
+
+@router.post("/generate-from-custom/{custom_test_id}", response_model=TestResponse)
+def generate_test_from_custom_template(
+    custom_test_id: int,
+    db: DBSession,
+    current_user: User = Depends(require_role(UserRole.student)),
+) -> TestResponse:
+    membership = db.scalar(
+        select(GroupMembership).where(GroupMembership.student_id == current_user.id)
+    )
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Вы не состоите в группе. Доступ к групповым тестам закрыт.",
+        )
+
+    custom_test = db.scalar(
+        select(TeacherAuthoredTest)
+        .options(joinedload(TeacherAuthoredTest.questions))
+        .join(TeacherAuthoredTestGroup, TeacherAuthoredTestGroup.test_id == TeacherAuthoredTest.id)
+        .where(
+            TeacherAuthoredTest.id == custom_test_id,
+            TeacherAuthoredTestGroup.group_id == membership.group_id,
+        )
+    )
+    if not custom_test:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Групповой тест не найден")
+    if not custom_test.questions:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="В выбранном тесте нет вопросов")
+
+    profile = db.get(StudentProfile, current_user.id)
+    language = profile.preferred_language if profile and profile.preferred_language else PreferredLanguage.ru
+    subject = _get_or_create_group_custom_subject(db)
+
+    test = Test(
+        student_id=current_user.id,
+        subject_id=subject.id,
+        difficulty=DifficultyLevel.medium,
+        language=language,
+        mode=TestMode.text,
+    )
+    db.add(test)
+    db.flush()
+    db.add(
+        TestSession(
+            test_id=test.id,
+            time_limit_seconds=max(60, int(custom_test.time_limit_seconds)),
+            warning_limit=max(0, int(custom_test.warning_limit)),
+            exam_kind="group_custom",
+            exam_config_json={
+                "title": custom_test.title,
+                "custom_test_id": custom_test.id,
+                "group_id": membership.group_id,
+            },
+        )
+    )
+
+    ordered_questions = sorted(custom_test.questions, key=lambda item: item.order_index)
+    for source in ordered_questions:
+        try:
+            normalized_type = QuestionType(source.question_type)
+        except ValueError:
+            normalized_type = QuestionType.short_text
+
+        if normalized_type not in {QuestionType.single_choice, QuestionType.short_text}:
+            normalized_type = QuestionType.short_text
+
+        test.questions.append(
+            Question(
+                test_id=test.id,
+                type=normalized_type,
+                prompt=str(source.prompt or "").strip(),
+                options_json=(source.options_json if normalized_type == QuestionType.single_choice else None),
+                correct_answer_json=dict(source.correct_answer_json or {}),
+                explanation_json={
+                    "topic": custom_test.title,
+                    "custom_test_id": custom_test.id,
+                    "custom_question_id": source.id,
+                },
+                tts_text=None,
+            )
+        )
+
+    db.commit()
+    db.refresh(test)
     return _build_test_response(test)
 
 
@@ -1351,6 +1442,26 @@ def _load_wrong_questions(db: DBSession, student_id: int, subject_id: int | None
         seen_question_ids.add(question.id)
         output.append((question, test))
     return output
+
+
+def _get_or_create_group_custom_subject(db: DBSession) -> Subject:
+    subject = db.scalar(
+        select(Subject).where(
+            Subject.name_ru == "Групповой тест",
+            Subject.name_kz == "Топтық тест",
+        )
+    )
+    if subject:
+        return subject
+
+    fallback = db.scalar(select(Subject).where(Subject.name_ru == "Групповой тест"))
+    if fallback:
+        return fallback
+
+    subject = Subject(name_ru="Групповой тест", name_kz="Топтық тест")
+    db.add(subject)
+    db.flush()
+    return subject
 
 
 def _load_test(db: DBSession, test_id: int) -> Test:

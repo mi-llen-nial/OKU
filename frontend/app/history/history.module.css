@@ -173,6 +173,11 @@
   font-size: 16px;
   line-height: 1.35;
   font-weight: 600;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .attemptTopics {
@@ -181,6 +186,11 @@
   font-size: 14px;
   line-height: 1.35;
   font-weight: 350;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .resultButton {
@@ -255,6 +265,11 @@
   font-size: 16px;
   line-height: 1.35;
   font-weight: 600;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .recommendText {
@@ -263,6 +278,11 @@
   font-size: 14px;
   line-height: 1.25;
   font-weight: 350;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .recommendAction {

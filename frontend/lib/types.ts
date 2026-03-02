@@ -208,6 +208,58 @@ export interface TeacherInvitation {
   responded_at?: string | null;
 }
 
+export type TeacherCustomAnswerType = "choice" | "free_text";
+
+export interface TeacherCustomGroupBrief {
+  id: number;
+  name: string;
+}
+
+export interface TeacherCustomQuestionInput {
+  prompt: string;
+  answer_type: TeacherCustomAnswerType;
+  options?: string[];
+  correct_option_index?: number | null;
+  sample_answer?: string | null;
+}
+
+export interface TeacherCustomTest {
+  id: number;
+  title: string;
+  duration_minutes: number;
+  warning_limit: number;
+  questions_count: number;
+  groups: TeacherCustomGroupBrief[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeacherCustomQuestion {
+  id: number;
+  order_index: number;
+  prompt: string;
+  answer_type: TeacherCustomAnswerType;
+  options: string[];
+  correct_option_index?: number | null;
+  sample_answer?: string | null;
+}
+
+export interface TeacherCustomTestDetails extends TeacherCustomTest {
+  questions: TeacherCustomQuestion[];
+}
+
+export interface GroupAssignedTest {
+  custom_test_id: number;
+  title: string;
+  questions_count: number;
+  duration_minutes: number;
+  warning_limit: number;
+  teacher_name: string;
+  group_id: number;
+  group_name: string;
+  created_at: string;
+}
+
 export interface ProfileInvitation {
   id: number;
   teacher_id: number;

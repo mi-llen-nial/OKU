@@ -1509,82 +1509,28 @@ SUBJECT_FACT_BANK: dict[str, list[dict[str, Any]]] = {
 
 def _difficulty_prompt_forms(language: PreferredLanguage, difficulty: DifficultyLevel) -> list[str]:
     if language == PreferredLanguage.ru:
-        if difficulty == DifficultyLevel.easy:
+        if difficulty in {DifficultyLevel.easy, DifficultyLevel.medium, DifficultyLevel.hard}:
             return [
                 "{question}",
-                "Выберите правильный ответ: {question}",
-                "Укажите верный вариант: {question}",
-                "Какой ответ правильный? {question}",
-                "Выберите корректный вариант ответа: {question}",
-                "Определите верный ответ: {question}",
-                "Какой вариант будет правильным? {question}",
+                "Укажите верный ответ: {question}",
                 "Найдите правильный ответ: {question}",
-                "Выберите точный вариант: {question}",
-                "Укажите правильный ответ к вопросу: {question}",
-            ]
-        if difficulty == DifficultyLevel.medium:
-            return [
-                "{question}",
-                "Выберите правильный ответ: {question}",
-                "Определите корректный вариант: {question}",
-                "Какой ответ является верным? {question}",
-                "Выберите наиболее подходящий вариант: {question}",
-                "Укажите точный ответ: {question}",
-                "Какой вариант соответствует условию? {question}",
-                "Найдите верный ответ: {question}",
-                "Выберите корректный ответ по условию: {question}",
-                "Определите правильный вариант ответа: {question}",
             ]
         return [
             "{question}",
-            "Выберите наиболее точный ответ: {question}",
-            "Определите корректный вариант: {question}",
-            "Какой ответ наиболее обоснован? {question}",
-            "Выберите правильный вариант с учетом условия: {question}",
-            "Найдите наиболее верный ответ: {question}",
-            "Какой вариант соответствует вопросу? {question}",
-            "Укажите наиболее точный ответ: {question}",
-            "Определите правильный ответ по условию: {question}",
-            "Выберите корректный ответ для вопроса: {question}",
+            "Укажите верный ответ: {question}",
+            "Найдите правильный ответ: {question}",
         ]
 
-    if difficulty == DifficultyLevel.easy:
+    if difficulty in {DifficultyLevel.easy, DifficultyLevel.medium, DifficultyLevel.hard}:
         return [
             "{question}",
             "Дұрыс жауапты таңдаңыз: {question}",
-            "Дұрыс нұсқаны көрсетіңіз: {question}",
-            "Қай жауап дұрыс? {question}",
-            "Дұрыс жауап нұсқасын таңдаңыз: {question}",
-            "Дұрыс жауапты анықтаңыз: {question}",
-            "Қай нұсқа дұрыс болады? {question}",
             "Дұрыс жауапты табыңыз: {question}",
-            "Нақты нұсқаны таңдаңыз: {question}",
-            "Сұраққа дұрыс жауапты көрсетіңіз: {question}",
-        ]
-    if difficulty == DifficultyLevel.medium:
-        return [
-            "{question}",
-            "Дұрыс жауапты таңдаңыз: {question}",
-            "Дұрыс нұсқаны анықтаңыз: {question}",
-            "Қай жауап дұрыс екенін көрсетіңіз: {question}",
-            "Ең сәйкес нұсқаны таңдаңыз: {question}",
-            "Нақты дұрыс жауапты көрсетіңіз: {question}",
-            "Қай нұсқа шартқа сай келеді? {question}",
-            "Дұрыс жауапты табыңыз: {question}",
-            "Шартқа сай дұрыс жауапты таңдаңыз: {question}",
-            "Дұрыс жауап нұсқасын анықтаңыз: {question}",
         ]
     return [
         "{question}",
-        "Ең дәл жауапты таңдаңыз: {question}",
-        "Дұрыс нұсқаны анықтаңыз: {question}",
-        "Қай жауап ең негізді? {question}",
-        "Шартты ескеріп, дұрыс жауапты таңдаңыз: {question}",
-        "Ең дұрыс жауапты табыңыз: {question}",
-        "Қай нұсқа сұраққа сәйкес келеді? {question}",
-        "Ең нақты дұрыс жауапты көрсетіңіз: {question}",
-        "Шарт бойынша дұрыс жауапты анықтаңыз: {question}",
-        "Сұраққа сәйкес дұрыс жауапты таңдаңыз: {question}",
+        "Дұрыс жауапты таңдаңыз: {question}",
+        "Дұрыс жауапты табыңыз: {question}",
     ]
 
 
@@ -1628,6 +1574,29 @@ def _fact_to_short_text_template(
     }
 
 
+def _is_command_style_prompt(prompt: str, *, language: PreferredLanguage) -> bool:
+    normalized = re.sub(r"\s+", " ", prompt.strip().lower())
+    if not normalized:
+        return False
+    if language == PreferredLanguage.ru:
+        starts = (
+            "выберите", "укажите", "найдите", "решите", "определите", "в каком",
+            "как", "какой", "какая", "чему", "сколько", "перед каким",
+        )
+    else:
+        starts = (
+            "таңдаңыз", "көрсетіңіз", "табыңыз", "шешіңіз", "анықтаңыз",
+            "қай", "қандай", "қалай", "қанша",
+        )
+    return normalized.startswith(starts) or normalized.endswith("?")
+
+
+def _compose_synthetic_prompt(*, form: str, prompt_base: str, topic: str, language: PreferredLanguage) -> str:
+    if form == "{question}" or _is_command_style_prompt(prompt_base, language=language):
+        return prompt_base
+    return form.format(topic=topic, question=prompt_base).strip()
+
+
 def _build_synthetic_templates(
     *,
     subject_key: str,
@@ -1652,19 +1621,13 @@ def _build_synthetic_templates(
             base_prompt_key = _template_prompt_key(prompt_base)
             options = list(_pick(language, ru=fact["options_ru"], kz=fact["options_kz"]))
             explanation = _pick(language, ru=fact["explanation_ru"], kz=fact["explanation_kz"])
-            prompt = form.format(topic=topic, question=prompt_base).strip()
+            prompt = _compose_synthetic_prompt(
+                form=form,
+                prompt_base=prompt_base,
+                topic=topic,
+                language=language,
+            )
             prompt = re.sub(r"\s+", " ", prompt)
-
-            if difficulty == DifficultyLevel.hard and (fact_idx + form_idx) % 5 == 0:
-                output.append(
-                    _fact_to_short_text_template(
-                        fact=fact,
-                        language=language,
-                        prompt=prompt,
-                        base_prompt_key=base_prompt_key,
-                    )
-                )
-                continue
 
             output.append(
                 {
@@ -1721,6 +1684,7 @@ def get_text_question_templates(
                 "type": item["type"],
                 "topic": _pick(language, ru=item["topic_ru"], kz=item["topic_kz"]),
                 "prompt": _pick(language, ru=item["prompt_ru"], kz=item["prompt_kz"]),
+                "base_prompt_key": _template_prompt_key(_pick(language, ru=item["prompt_ru"], kz=item["prompt_kz"])),
                 "options": _pick(language, ru=item.get("options_ru"), kz=item.get("options_kz")),
                 "correct_option_ids": list(item.get("correct_option_ids", [])),
                 "keywords": _pick(language, ru=item.get("keywords_ru", []), kz=item.get("keywords_kz", [])),

@@ -29,6 +29,9 @@ def build_student_history(db: Session, student_id: int) -> list[HistoryItemRespo
             subject_name = "ЕНТ"
         elif exam_kind == "ielts":
             subject_name = "IELTS"
+        elif exam_kind == "group_custom":
+            configured_title = str((session.exam_config_json or {}).get("title", "")).strip() if session else ""
+            subject_name = configured_title or (subject.name_ru if test.language.value == "RU" else subject.name_kz)
         else:
             subject_name = subject.name_ru if test.language.value == "RU" else subject.name_kz
 

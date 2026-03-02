@@ -627,6 +627,9 @@ Seed уникальности: {seed}
 - Для short_text/oral_answer используй keywords и sample_answer.
 - Для matching используй matches словарь left->right.
 - Для oral_answer в correct_answer_json добавь expected_field="spoken_answer_text".
+- Не используй мета-формулировки: "по теме ... выберите базовое утверждение", "найдите корректный факт", "опирайтесь на школьный курс".
+- Каждый вопрос должен быть конкретным и предметным (термин, правило, вычисление, причинно-следственная связь, факт).
+- Не превращай явно тестовые формулировки ("в каком слове", "выберите синоним/антоним", "правильная форма слова") в short_text/oral_answer.
 - Верни ровно {num_questions} вопросов.
 {hard_free_rule}
 """.strip()
@@ -1140,6 +1143,23 @@ Seed уникальности: {seed}
     def _variant_prompt(prompt: str, *, language: PreferredLanguage, variant_index: int) -> str:
         base = prompt.strip()
         if not base or variant_index <= 0:
+            return base
+
+        # Preserve already natural stems (questions/commands) to avoid noisy paraphrases.
+        base_lower = re.sub(r"\s+", " ", base.lower()).strip()
+        protected_starts_ru = (
+            "в каком", "в какой", "в какие", "какая", "какой", "какие", "как", "чему", "сколько",
+            "решите", "найдите", "укажите", "выберите", "перед каким", "определите", "сопоставьте", "объясните",
+        )
+        protected_starts_kz = (
+            "қай", "қандай", "қалай", "қанша", "теңдеуді шеш", "табыңыз", "көрсетіңіз",
+            "таңдаңыз", "анықтаңыз", "сәйкестендіріңіз", "түсіндіріңіз",
+        )
+        if base.endswith("?"):
+            return base
+        if language == PreferredLanguage.ru and base_lower.startswith(protected_starts_ru):
+            return base
+        if language == PreferredLanguage.kz and base_lower.startswith(protected_starts_kz):
             return base
 
         if language == PreferredLanguage.ru:
@@ -1695,19 +1715,6 @@ Seed уникальности: {seed}
             templates=list(templates),
             rng=rng,
         )
-
-        if len(text_questions) < target_count:
-            text_questions.extend(
-                self._generate_text_template_variants(
-                    templates=templates,
-                    subject=subject,
-                    difficulty=difficulty,
-                    language=language,
-                    count=target_count - len(text_questions),
-                    rng=rng,
-                    variant_offset=0,
-                )
-            )
 
         candidates: list[GeneratedQuestionPayload] = []
         for index, question in enumerate(text_questions[:target_count]):
@@ -2441,7 +2448,9 @@ Seed уникальности: {seed}
             if current_short_questions >= required_short_questions:
                 break
             question = questions[index]
-            if question.type not in {QuestionType.single_choice, QuestionType.multi_choice}:
+            if question.type != QuestionType.single_choice:
+                continue
+            if not self._can_convert_choice_to_short_text(question=question):
                 continue
             topic = str(question.explanation_json.get("topic", "")).strip() or (
                 "Причинно-следственный анализ" if language == PreferredLanguage.ru else "Себеп-салдар талдауы"
@@ -2460,19 +2469,63 @@ Seed уникальности: {seed}
             )
             current_short_questions += 1
 
-        if difficulty != DifficultyLevel.hard:
-            return
+        # Do not fabricate multi_choice by converting single_choice with synthetic
+        # additional correct answers: it reduces question quality.
+        return
 
-        required_multi_questions = max(1, len(questions) // 4)
-        current_multi_questions = sum(1 for item in questions if item.type == QuestionType.multi_choice)
-        for index in range(len(questions) - 1, -1, -1):
-            if current_multi_questions >= required_multi_questions:
-                break
-            question = questions[index]
-            if question.type != QuestionType.single_choice:
-                continue
-            questions[index] = self._convert_single_to_multi(question=question, language=language)
-            current_multi_questions += 1
+    @staticmethod
+    def _can_convert_choice_to_short_text(*, question: GeneratedQuestionPayload) -> bool:
+        prompt = re.sub(r"\s+", " ", str(question.prompt or "").strip().lower())
+        topic = re.sub(r"\s+", " ", str((question.explanation_json or {}).get("topic", "")).strip().lower())
+
+        blocked_prompt_ru = [
+            r"\bв каком слове\b",
+            r"\bв каком предложении\b",
+            r"\bперед каким союзом\b",
+            r"\bвыберите синоним\b",
+            r"\bвыберите антоним\b",
+            r"\bвыберите верные утверждения\b",
+            r"\bкак правильно написать\b",
+            r"\bкакая часть речи\b",
+            r"\bвыберите правильную форму\b",
+        ]
+        blocked_prompt_kz = [
+            r"\bқай сөзде\b",
+            r"\bқай сөйлемде\b",
+            r"\bқандай жалғаулық\b",
+            r"\bсиноним\b",
+            r"\bантоним\b",
+            r"\bдұрыс жаз\b",
+            r"\bқай сөз табы\b",
+            r"\bдұрыс форманы таңда\b",
+        ]
+        blocked_topic_parts = (
+            "орфограф", "пунктуац", "лексик", "морфолог", "синтакс", "фонетик",
+            "граммат", "grammar", "tenses", "spelling", "vocabulary",
+        )
+
+        if any(re.search(pattern, prompt) for pattern in [*blocked_prompt_ru, *blocked_prompt_kz]):
+            return False
+        if any(part in topic for part in blocked_topic_parts):
+            return False
+
+        options = list((question.options_json or {}).get("options", []) or [])
+        option_texts: list[str] = []
+        for item in options:
+            if isinstance(item, dict):
+                text = str(item.get("text", "")).strip()
+            else:
+                text = str(item).strip()
+            if text:
+                option_texts.append(re.sub(r"^\s*[A-ZА-Я]\s*[\).\:\-]\s*", "", text))
+
+        # Lexical selector questions are poor candidates for free-text conversion.
+        if option_texts:
+            short_items = sum(1 for text in option_texts if len(text.split()) <= 4)
+            if short_items / len(option_texts) >= 0.8:
+                return False
+
+        return True
 
     def _make_short_text_question(
         self,
@@ -2486,6 +2539,25 @@ Seed уникальности: {seed}
         oral: bool = False,
     ) -> GeneratedQuestionPayload:
         normalized_prompt = prompt.strip()
+        normalized_prompt = re.sub(
+            r"^\s*(выберите (правильный|корректный|наиболее подходящий|наиболее точный) "
+            r"(ответ|вариант)( ответа)?\s*:\s*)",
+            "",
+            normalized_prompt,
+            flags=re.IGNORECASE,
+        )
+        normalized_prompt = re.sub(
+            r"^\s*(укажите (верный|точный|правильный) (вариант|ответ)\s*:\s*)",
+            "",
+            normalized_prompt,
+            flags=re.IGNORECASE,
+        )
+        normalized_prompt = re.sub(
+            r"^\s*(дұрыс (жауапты|нұсқаны) (таңдаңыз|көрсетіңіз)\s*:\s*)",
+            "",
+            normalized_prompt,
+            flags=re.IGNORECASE,
+        )
         normalized_prompt = re.sub(r"\s*Выберите один правильный ответ\.?\s*$", "", normalized_prompt, flags=re.IGNORECASE)
         normalized_prompt = re.sub(r"\s*Выберите все верные варианты\.?\s*$", "", normalized_prompt, flags=re.IGNORECASE)
         normalized_prompt = re.sub(r"\s*Бір дұрыс жауапты таңдаңыз\.?\s*$", "", normalized_prompt, flags=re.IGNORECASE)
@@ -2550,6 +2622,14 @@ Seed уникальности: {seed}
             r"^\[[^\]]+\]\s*вопрос\s*\d+",
             r"^\d+\s*[-–]?\s*сұрақ",
             r"^\[[^\]]+\]\s*\d+\s*[-–]?\s*сұрақ",
+            r"^по предмету\s+«[^»]+»\s+выполните задание по теме",
+            r"выберите верное базовое утверждение",
+            r"сопоставьте термин и смысл",
+            r"найдите корректный факт по теме",
+            r"используйте базовое правило темы",
+            r"опирайтесь на школьный курс",
+            r"выберите наиболее подходящий вариант:\s*выберите",
+            r"выберите правильный ответ:\s*выберите",
         ]
         return any(re.search(pattern, normalized) for pattern in low_quality_patterns)
 
@@ -2752,17 +2832,54 @@ Seed уникальности: {seed}
         normalized = re.sub(r"[.!?…]+$", "", normalized).strip()
         return normalized
 
+    @staticmethod
+    def _semantic_prompt_key(prompt: str) -> str:
+        normalized = AIService._prompt_key(prompt)
+        tokens = re.findall(r"[a-zа-яәіңғүұқөһ0-9]+", normalized)
+        if not tokens:
+            return normalized
+
+        stopwords = {
+            "и", "или", "в", "во", "на", "по", "к", "с", "со", "у", "о", "об", "за", "от", "до",
+            "что", "это", "как", "какой", "какая", "какие", "каком", "чему", "сколько", "нужно",
+            "найдите", "выберите", "укажите", "определите", "решите", "имеет", "имеют", "есть",
+            "дұрыс", "жауап", "таңдаңыз", "көрсетіңіз", "анықтаңыз", "табыңыз",
+        }
+        cleaned: list[str] = []
+        for token in tokens:
+            if len(token) <= 1 or token in stopwords:
+                continue
+            base = token
+            for suffix in (
+                "иями", "ями", "ами", "ого", "ему", "ому", "ыми", "ими",
+                "ение", "ения", "ния", "ние", "ости", "ость",
+                "ый", "ий", "ой", "ая", "ое", "ые",
+                "ах", "ях", "ом", "ем", "ам", "ям", "ов", "ев",
+                "ия", "ие", "лар", "лер", "ы", "и", "а", "я",
+            ):
+                if base.endswith(suffix) and len(base) - len(suffix) >= 4:
+                    base = base[: -len(suffix)]
+                    break
+            cleaned.append(base or token)
+        if not cleaned:
+            return normalized
+        return " ".join(sorted(set(cleaned)))
+
     def _question_uniqueness_key(self, question: GeneratedQuestionPayload) -> str:
         explanation = dict(question.explanation_json or {})
+        base_key = str(explanation.get("library_base_key", "")).strip().lower()
+        if base_key:
+            return f"base::{self._semantic_prompt_key(base_key)}"
+
         template_key = str(explanation.get("library_template_key", "")).strip().lower()
         if template_key:
-            return f"tpl::{template_key}"
+            return f"tpl::{self._semantic_prompt_key(template_key)}"
 
         content_key = str(explanation.get("library_content_key", "")).strip().lower()
         if content_key:
-            return f"cnt::{content_key}"
+            return f"cnt::{self._semantic_prompt_key(content_key)}"
 
-        return f"pr::{self._prompt_key(question.prompt)}"
+        return f"pr::{self._semantic_prompt_key(question.prompt)}"
 
     def _fallback_option_texts(self, *, topic: str, language: PreferredLanguage, count: int) -> list[str]:
         if language == PreferredLanguage.ru:
