@@ -21,7 +21,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const lockClass = "auth-viewport-locked";
+    document.documentElement.classList.add(lockClass);
+    document.body.classList.add(lockClass);
     setRememberMe(isRememberMeEnabled());
+
+    return () => {
+      document.documentElement.classList.remove(lockClass);
+      document.body.classList.remove(lockClass);
+    };
   }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

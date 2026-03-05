@@ -170,6 +170,9 @@
 
 @media (max-width: 960px) {
   .authSplit {
+    position: fixed;
+    inset: 0;
+    width: 100%;
     grid-template-columns: 1fr;
     min-height: 100dvh;
     height: 100dvh;

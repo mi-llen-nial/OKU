@@ -44,6 +44,20 @@ html {
   scrollbar-gutter: stable;
 }
 
+html.auth-viewport-locked,
+body.auth-viewport-locked {
+  background: #6a63f5 !important;
+  overscroll-behavior-y: none;
+}
+
+@media (max-width: 960px) {
+  html.auth-viewport-locked,
+  body.auth-viewport-locked {
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
 body {
   font-family: var(--font-body);
   letter-spacing: 0.007em;

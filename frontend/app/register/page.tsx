@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { register, sendRegisterCode } from "@/lib/api";
 import { saveSession } from "@/lib/auth";
@@ -30,6 +30,17 @@ export default function RegisterPage() {
   const [sendingCode, setSendingCode] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const lockClass = "auth-viewport-locked";
+    document.documentElement.classList.add(lockClass);
+    document.body.classList.add(lockClass);
+
+    return () => {
+      document.documentElement.classList.remove(lockClass);
+      document.body.classList.remove(lockClass);
+    };
+  }, []);
 
   const validateDetailsStep = () => {
     const emailValue = email.trim();
