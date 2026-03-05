@@ -1,6 +1,7 @@
 from app.models.entities import (
     Answer,
     DifficultyLevel,
+    EmailVerificationCode,
     Group,
     GroupInvitation,
     GroupMembership,
@@ -26,6 +27,7 @@ from app.models.entities import (
 __all__ = [
     "Answer",
     "DifficultyLevel",
+    "EmailVerificationCode",
     "Group",
     "GroupInvitation",
     "GroupMembership",

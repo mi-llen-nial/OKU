@@ -1,6 +1,6 @@
 # OKU Prototype
 
-OKU — персонализированная система экзаменов (RU/KZ) с AI-генерацией уникальных тестов, авто-проверкой, рекомендациями по слабым темам и teacher-аналитикой
+OKU — персонализированная система экзаменов (RU/KZ) с AI-генерацией уникальных тестов, авто-проверкой, рекомендациями по слабым темам и teacher-аналитикой.
 
 
 ## Stack
@@ -138,6 +138,21 @@ GRANT ALL PRIVILEGES ON DATABASE oku TO oku;
 - `TTS_PROVIDER=elevenlabs` для более реалистичного коммерческого TTS
 - `ELEVENLABS_API_KEY=<your_key>`
 - `ELEVENLABS_VOICE_ID_RU=<voice_id>` (и опционально `ELEVENLABS_VOICE_ID_KZ=<voice_id>`)
+- `EMAIL_VERIFICATION_ENABLED=true`
+- `EMAIL_PROVIDER=smtp` (локально) или `EMAIL_PROVIDER=sendgrid|resend` (prod)
+- `SMTP_HOST=smtp.office365.com` (если `EMAIL_PROVIDER=smtp`)
+- `SMTP_PORT=587`
+- `SMTP_STARTTLS=true`
+- `SMTP_USERNAME=<корпоративная_почта>`
+- `SMTP_PASSWORD=<пароль_почты>`
+- `SMTP_FROM_EMAIL=<корпоративная_почта>` (или верифицированный sender в SendGrid)
+- `SMTP_FROM_NAME=OKU`
+- `SENDGRID_API_KEY=<sendgrid_api_key>` (если `EMAIL_PROVIDER=sendgrid`)
+- `SENDGRID_BASE_URL=https://api.sendgrid.com/v3`
+- `EMAIL_PROVIDER=resend` (рекомендуется для production)
+- `RESEND_API_KEY=<resend_api_key>`
+- `RESEND_BASE_URL=https://api.resend.com`
+- `SMTP_FROM_EMAIL=<верифицированный_sender_email>`
 
 ### 4) Установка зависимостей
 ```bash
@@ -217,6 +232,7 @@ cd /Users/mellennial/Programming/KOMA/oku
 ## Основные API endpoints
 - Базовый префикс: `/api/v1`
 - `POST /api/v1/auth/register`
+- `POST /api/v1/auth/register/send-code`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
 - `GET /api/v1/subjects`
@@ -240,7 +256,28 @@ cd /Users/mellennial/Programming/KOMA/oku
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"student1@oku.local","password":"student123"}'
+  -d '{"email":"student1@oku.local","password":"student123","remember_me":true}'
+```
+
+### Регистрация с кодом почты
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/register/send-code \
+  -H "Content-Type: application/json" \
+  -d '{"email":"new.user@example.com"}'
+
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email":"new.user@example.com",
+    "full_name":"Новый Пользователь",
+    "username":"new_user_1",
+    "password":"StrongPass123",
+    "role":"student",
+    "preferred_language":"RU",
+    "education_level":"school",
+    "direction":"Общий профиль",
+    "email_verification_code":"123456"
+  }'
 ```
 
 ### Generate test

@@ -108,6 +108,19 @@ class UserSession(Base):
     user: Mapped[User] = relationship(back_populates="sessions")
 
 
+class EmailVerificationCode(Base):
+    __tablename__ = "email_verification_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    purpose: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
 class Group(Base):
     __tablename__ = "groups"
 

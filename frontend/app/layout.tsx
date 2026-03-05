@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 
+import { absoluteUrl, siteConfig, siteUrl } from "@/src/config/site";
 import { tokens } from "@/src/theme/tokens";
 import "./globals.css";
 
@@ -11,12 +12,55 @@ const bodyFont = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "OKU",
-  description: "AI-платформа персонализированного тестирования",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "OKU — образовательная AI-платформа",
+    template: "%s | OKU",
+  },
+  description: siteConfig.description,
+  applicationName: siteConfig.name,
+  keywords: siteConfig.keywords,
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    nocache: false,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: siteConfig.locale,
+    siteName: siteConfig.name,
+    title: "OKU — образовательная AI-платформа",
+    description: siteConfig.description,
+    url: absoluteUrl("/"),
+    images: [
+      {
+        url: siteConfig.ogImage,
+        width: 1024,
+        height: 1024,
+        alt: "Логотип платформы OKU",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OKU — образовательная AI-платформа",
+    description: siteConfig.description,
+    images: [siteConfig.ogImage],
+  },
   icons: {
     icon: "/assets/logo/logo.svg",
     shortcut: "/assets/logo/logo.svg",
-    apple: "/assets/logo.png",
+    apple: "/assets/logo/logo.png",
   },
 };
 
@@ -29,6 +73,24 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const websiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: siteConfig.name,
+    url: absoluteUrl("/"),
+    description: siteConfig.description,
+    inLanguage: ["ru", "kk"],
+  };
+
+  const organizationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: siteConfig.name,
+    url: absoluteUrl("/"),
+    logo: absoluteUrl(siteConfig.ogImage),
+    sameAs: [siteConfig.telegram.okuBotUrl, siteConfig.telegram.faqBotUrl],
+  };
+
   const cssVars = {
     "--brand-primary": tokens.colors.brand.primary,
     "--brand-secondary": tokens.colors.brand.secondary,
@@ -52,6 +114,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ru">
       <body className={bodyFont.variable} style={cssVars}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        />
         {children}
       </body>
     </html>

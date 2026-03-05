@@ -79,6 +79,24 @@ class Settings(BaseSettings):
     teacher_max_groups: int = 3
     group_max_members: int = 5
 
+    email_verification_enabled: bool = True
+    email_verification_code_ttl_minutes: int = 10
+    email_verification_resend_cooldown_seconds: int = 60
+    email_provider: str = "smtp"
+    smtp_host: str = "smtp.office365.com"
+    smtp_port: int = 587
+    smtp_starttls: bool = True
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = "OKU"
+    sendgrid_api_key: str = ""
+    sendgrid_base_url: str = "https://api.sendgrid.com/v3"
+    sendgrid_timeout_seconds: int = 20
+    resend_api_key: str = ""
+    resend_base_url: str = "https://api.resend.com"
+    resend_timeout_seconds: int = 20
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

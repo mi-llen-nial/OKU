@@ -22,8 +22,16 @@ from app.schemas.auth import (
     LoginRequest,
     RefreshTokenRequest,
     RegisterRequest,
+    SendRegisterCodeRequest,
+    SendRegisterCodeResponse,
     TokenRefreshResponse,
     UserResponse,
+)
+from app.services.email_verification import (
+    EmailVerificationError,
+    EmailVerificationProviderError,
+    EmailVerificationRateLimitError,
+    email_verification_service,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -41,6 +49,24 @@ def register(payload: RegisterRequest, request: Request, response: Response, db:
     username_exists = db.scalar(select(User).where(func.lower(User.username) == username_value.lower()))
     if username_exists:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пользователь с таким именем пользователя уже существует")
+
+    if settings.email_verification_enabled:
+        if not payload.email_verification_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Сначала подтвердите почту кодом из письма.",
+            )
+        verified = email_verification_service.consume_register_code(
+            db=db,
+            email=email_value,
+            code=payload.email_verification_code,
+        )
+        if not verified:
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Неверный или истекший код подтверждения почты.",
+            )
 
     user = User(
         email=email_value,
@@ -91,8 +117,41 @@ def login(payload: LoginRequest, request: Request, response: Response, db: DBSes
         db=db,
         user_id=user.id,
         request=request,
+        remember_me=payload.remember_me,
     )
-    return _build_auth_response(response=response, access_token=access_token, refresh_token=refresh_token, user=user)
+    return _build_auth_response(
+        response=response,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=user,
+        remember_me=payload.remember_me,
+    )
+
+
+@router.post("/register/send-code", response_model=SendRegisterCodeResponse)
+def send_register_code(payload: SendRegisterCodeRequest, db: DBSession) -> SendRegisterCodeResponse:
+    if not settings.email_verification_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Проверка почты отключена в настройках сервера.",
+        )
+    try:
+        expires_in_seconds = email_verification_service.send_register_code(db=db, email=payload.email)
+    except EmailVerificationRateLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Повторная отправка доступна через {exc.retry_after_seconds} сек.",
+        ) from exc
+    except EmailVerificationProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except EmailVerificationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    db.commit()
+    return SendRegisterCodeResponse(
+        message="Код подтверждения отправлен на указанную почту.",
+        expires_in_seconds=expires_in_seconds,
+    )
 
 
 @router.post("/refresh", response_model=TokenRefreshResponse)
@@ -169,11 +228,18 @@ def _build_user_response(user: User) -> UserResponse:
     )
 
 
-def _create_tokens_for_user(*, db: DBSession, user_id: int, request: Request) -> tuple[str, str]:
+def _create_tokens_for_user(
+    *,
+    db: DBSession,
+    user_id: int,
+    request: Request,
+    remember_me: bool = True,
+) -> tuple[str, str]:
     now = datetime.now(timezone.utc)
     session_id = str(uuid4())
-    refresh_expires = now + timedelta(days=settings.refresh_token_expire_days)
-    refresh_token = create_refresh_token(user_id, session_id, expires_delta=timedelta(days=settings.refresh_token_expire_days))
+    refresh_days = settings.refresh_token_expire_days if remember_me else 1
+    refresh_expires = now + timedelta(days=refresh_days)
+    refresh_token = create_refresh_token(user_id, session_id, expires_delta=timedelta(days=refresh_days))
 
     session = UserSession(
         id=session_id,
@@ -198,9 +264,17 @@ def _create_tokens_for_user(*, db: DBSession, user_id: int, request: Request) ->
     return access_token, refresh_token
 
 
-def _build_auth_response(*, response: Response, access_token: str, refresh_token: str, user: User) -> AuthResponse:
+def _build_auth_response(
+    *,
+    response: Response,
+    access_token: str,
+    refresh_token: str,
+    user: User,
+    remember_me: bool = True,
+) -> AuthResponse:
     if settings.use_http_only_refresh_cookie:
-        _set_refresh_cookie(response, refresh_token)
+        max_age_days = settings.refresh_token_expire_days if remember_me else 1
+        _set_refresh_cookie(response, refresh_token, max_age_days=max_age_days)
         response_refresh_token: str | None = None
     else:
         response_refresh_token = refresh_token
@@ -217,14 +291,14 @@ def _extract_refresh_token(*, payload: RefreshTokenRequest | None, request: Requ
     return body_token or cookie_token
 
 
-def _set_refresh_cookie(response: Response, token: str) -> None:
+def _set_refresh_cookie(response: Response, token: str, *, max_age_days: int) -> None:
     response.set_cookie(
         key=settings.refresh_cookie_name,
         value=token,
         httponly=True,
         secure=settings.app_env.lower() == "production",
         samesite="lax",
-        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+        max_age=max_age_days * 24 * 60 * 60,
     )
 
 

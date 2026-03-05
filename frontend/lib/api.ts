@@ -486,6 +486,7 @@ export function register(body: {
   full_name: string;
   username: string;
   password: string;
+  email_verification_code: string;
   role: "student" | "teacher";
   preferred_language: "RU" | "KZ";
   education_level?: "school" | "college" | "university" | null;
@@ -498,7 +499,14 @@ export function register(body: {
   });
 }
 
-export function login(body: { email: string; password: string }) {
+export function sendRegisterCode(body: { email: string }) {
+  return apiRequest<{ message: string; expires_in_seconds: number }>("/auth/register/send-code", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function login(body: { email: string; password: string; remember_me?: boolean }) {
   return apiRequest<AuthResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify(body),

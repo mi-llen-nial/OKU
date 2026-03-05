@@ -22,6 +22,7 @@ class RegisterRequest(BaseModel):
     education_level: EducationLevel | None = EducationLevel.school
     direction: str | None = Field(default=None, min_length=2, max_length=255)
     group_id: int | None = None
+    email_verification_code: str | None = Field(default=None, min_length=6, max_length=6, pattern=r"^\d{6}$")
 
     @field_validator("username", mode="before")
     @classmethod
@@ -42,6 +43,16 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     password: str = Field(min_length=6, max_length=128)
+    remember_me: bool = False
+
+
+class SendRegisterCodeRequest(BaseModel):
+    email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+class SendRegisterCodeResponse(BaseModel):
+    message: str
+    expires_in_seconds: int
 
 
 class RefreshTokenRequest(BaseModel):

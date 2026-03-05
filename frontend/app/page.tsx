@@ -72,7 +72,7 @@ export default function LandingPage() {
               "Тестілеуді оқу құралына айналдыратын бірыңғай платформа",
             )}
           </p>
-          <div className={styles.heroActions}>
+          <div className={styles.heroActions} data-nosnippet="true">
             <Link className={styles.ctaPrimary} href="/register">
               {t("Регистрация", "Тіркелу")}
             </Link>
@@ -170,7 +170,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className={styles.footer}>OKU.com.kz</footer>
+      <footer className={styles.footer} data-nosnippet="true">OKU.com.kz</footer>
     </div>
   );
 }

@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
-import Button from "@/components/ui/Button";
 import { login } from "@/lib/api";
-import { saveSession } from "@/lib/auth";
+import { isRememberMeEnabled, saveSession } from "@/lib/auth";
 import { tr, useUiLanguage } from "@/lib/i18n";
 import { assetPaths } from "@/src/assets";
+import styles from "@/app/auth.module.css";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,8 +16,13 @@ export default function LoginPage() {
   const t = (ru: string, kz: string) => tr(uiLanguage, ru, kz);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setRememberMe(isRememberMeEnabled());
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -25,8 +30,8 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await login({ email, password });
-      saveSession(response);
+      const response = await login({ email, password, remember_me: rememberMe });
+      saveSession(response, { rememberMe });
       router.push(response.user.role === "teacher" ? "/teacher" : "/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Не удалось выполнить вход", "Кіру орындалмады"));
@@ -36,38 +41,63 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="authPage">
-      <div className="authCard">
-        <div className="authHeader">
-          <img className="authLogo" src={assetPaths.logo.png} alt="OKU" />
-          <div>
-            <h2 className="authTitle">{t("Вход в OKU", "OKU-ға кіру")}</h2>
-            <p className="authText">{t("Используйте аккаунт студента или преподавателя.", "Оқушы немесе оқытушы аккаунтын қолданыңыз.")}</p>
-          </div>
-        </div>
+    <div className={styles.authSplit}>
+      <section className={styles.brandPanel}>
+        <img className={styles.brandLogo} src={assetPaths.logo.svg} alt="OKU" />
+      </section>
+      <section className={styles.formPanel}>
+        <form className={styles.formCard} onSubmit={handleSubmit}>
+          <h1 className={styles.title}>{t("Вход", "Кіру")}</h1>
+          <p className={styles.subtitle}>
+            {t("Используйте аккаунт студента или преподавателя", "Оқушы немесе оқытушы аккаунтын қолданыңыз")}
+          </p>
 
-        <form className="formGrid" onSubmit={handleSubmit}>
-          <label>
-            {t("Почта", "Электрондық пошта")}
-            <input onChange={(e) => setEmail(e.target.value)} type="email" value={email} />
+          <label className={styles.label}>
+            <span>{t("Почта", "Электрондық пошта")}</span>
+            <input
+              className={styles.input}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              type="email"
+              value={email}
+            />
           </label>
 
-          <label>
-            {t("Пароль", "Құпиясөз")}
-            <input onChange={(e) => setPassword(e.target.value)} type="password" value={password} />
+          <label className={styles.label}>
+            <span>{t("Пароль", "Құпиясөз")}</span>
+            <input
+              className={styles.input}
+              minLength={6}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              type="password"
+              value={password}
+            />
           </label>
 
-          {error && <div className="errorText">{error}</div>}
+          <label className={styles.rememberRow}>
+            <input
+              checked={rememberMe}
+              onChange={(event) => setRememberMe(event.target.checked)}
+              type="checkbox"
+            />
+            <span>{t("Запомнить меня", "Мені есте сақтау")}</span>
+          </label>
 
-          <Button block disabled={loading} type="submit">
+          {error ? <p className={styles.error}>{error}</p> : null}
+
+          <button className={styles.primaryButton} disabled={loading} type="submit">
             {loading ? t("Выполняем вход...", "Кіру орындалып жатыр...") : t("Войти", "Кіру")}
-          </Button>
-        </form>
+          </button>
 
-        <p className="authText" style={{ marginTop: 14 }}>
-          {t("Нет аккаунта?", "Аккаунт жоқ па?")} <Link href="/register">{t("Регистрация", "Тіркелу")}</Link>
-        </p>
-      </div>
+          <p className={styles.bottomText}>
+            {t("Нет аккаунта?", "Аккаунт жоқ па?")}{" "}
+            <Link className={styles.bottomLink} href="/register">
+              {t("Регистрация", "Тіркелу")}
+            </Link>
+          </p>
+        </form>
+      </section>
     </div>
   );
 }
