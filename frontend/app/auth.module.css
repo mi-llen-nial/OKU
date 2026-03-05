@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: center;
   padding: 32px 40px;
-  overflow-y: auto;
+  overflow: hidden;
   scrollbar-gutter: stable both-edges;
 }
 
@@ -171,6 +171,10 @@
 @media (max-width: 960px) {
   .authSplit {
     grid-template-columns: 1fr;
+    min-height: 100dvh;
+    height: 100dvh;
+    background: #6a63f5;
+    overflow: hidden;
   }
 
   .brandPanel {
@@ -178,9 +182,14 @@
   }
 
   .formPanel {
-    min-height: 100vh;
-    padding: 24px 18px;
-    align-items: flex-start;
+    min-height: 100dvh;
+    height: 100dvh;
+    padding: max(24px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
+      max(24px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    scrollbar-gutter: auto;
   }
 
   .formCard {
