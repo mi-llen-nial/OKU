@@ -104,7 +104,13 @@ export default function TestRunnerPage() {
   const warningsRef = useRef<TestIntegrityWarning[]>([]);
   const textFocusAtRef = useRef<Record<number, number>>({});
   const fastInputFlagRef = useRef<Record<number, boolean>>({});
-  const lastVisibilityWarningAtRef = useRef(0);
+  const lastFocusLossWarningAtRef = useRef(0);
+  const pasteShortcutAtRef = useRef<Record<number, number>>({});
+  const pasteEventAtRef = useRef<Record<number, number>>({});
+  const pasteShortcutTimerRef = useRef<Record<number, number>>({});
+  const baselineViewportRef = useRef<{ width: number; height: number } | null>(null);
+  const lastResizeWarningAtRef = useRef(0);
+  const lastInspectorWarningAtRef = useRef(0);
   const autoSubmittedRef = useRef(false);
 
   useEffect(() => {
@@ -164,7 +170,15 @@ export default function TestRunnerPage() {
     warningsRef.current = [];
     textFocusAtRef.current = {};
     fastInputFlagRef.current = {};
-    lastVisibilityWarningAtRef.current = 0;
+    lastFocusLossWarningAtRef.current = 0;
+    pasteShortcutAtRef.current = {};
+    pasteEventAtRef.current = {};
+    const activePasteTimers = Object.values(pasteShortcutTimerRef.current);
+    activePasteTimers.forEach((timerId) => window.clearTimeout(timerId));
+    pasteShortcutTimerRef.current = {};
+    baselineViewportRef.current = null;
+    lastResizeWarningAtRef.current = 0;
+    lastInspectorWarningAtRef.current = 0;
     autoSubmittedRef.current = false;
     const startedAt = Date.now();
     const interval = window.setInterval(() => {
@@ -178,19 +192,104 @@ export default function TestRunnerPage() {
   useEffect(() => {
     if (!test) return;
 
-    const onVisibilityChange = () => {
-      if (!document.hidden) return;
+    const registerFocusLossWarning = (source: string) => {
       const now = Date.now();
-      if (now - lastVisibilityWarningAtRef.current < 1500) return;
-      lastVisibilityWarningAtRef.current = now;
+      if (now - lastFocusLossWarningAtRef.current < 1500) return;
+      lastFocusLossWarningAtRef.current = now;
       addIntegrityWarning({
-        type: "tab_switch",
-        details: { source: "visibilitychange" },
+        type: "focus_lost",
+        details: { source },
       });
     };
 
+    const onVisibilityChange = () => {
+      if (!document.hidden) return;
+      registerFocusLossWarning("visibilitychange");
+    };
+
+    const onWindowBlur = () => {
+      if (document.hidden) return;
+      registerFocusLossWarning("window_blur");
+    };
+
     document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", onWindowBlur);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", onWindowBlur);
+    };
+  }, [addIntegrityWarning, test]);
+
+  useEffect(() => {
+    if (!test || typeof window === "undefined") return;
+
+    baselineViewportRef.current = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
+
+    const maybeWarnSuspiciousResize = (source: "resize" | "interval") => {
+      const baseline = baselineViewportRef.current;
+      if (!baseline) return;
+
+      const currentWidth = window.innerWidth;
+      const currentHeight = window.innerHeight;
+      const widthDelta = Math.abs(currentWidth - baseline.width);
+      const heightDelta = Math.abs(currentHeight - baseline.height);
+      const widthRatio = widthDelta / Math.max(1, baseline.width);
+      const heightRatio = heightDelta / Math.max(1, baseline.height);
+      const now = Date.now();
+
+      const suspiciousViewportResize =
+        (widthDelta >= 220 && widthRatio >= 0.28) ||
+        (heightDelta >= 220 && heightRatio >= 0.32);
+      if (suspiciousViewportResize && now - lastResizeWarningAtRef.current >= 4000) {
+        lastResizeWarningAtRef.current = now;
+        addIntegrityWarning({
+          type: "suspicious_viewport_resize",
+          details: {
+            source,
+            baseline_width: baseline.width,
+            baseline_height: baseline.height,
+            current_width: currentWidth,
+            current_height: currentHeight,
+            width_delta: widthDelta,
+            height_delta: heightDelta,
+          },
+        });
+      }
+
+      const isDesktop = currentWidth >= 900 && currentHeight >= 600;
+      if (!isDesktop) return;
+
+      const widthGap = Math.max(0, window.outerWidth - currentWidth);
+      const heightGap = Math.max(0, window.outerHeight - currentHeight);
+      const inspectorLikelyOpen = widthGap >= 170 || heightGap >= 170;
+      if (inspectorLikelyOpen && now - lastInspectorWarningAtRef.current >= 4000) {
+        lastInspectorWarningAtRef.current = now;
+        addIntegrityWarning({
+          type: "inspector_open_attempt",
+          details: {
+            source,
+            outer_width: window.outerWidth,
+            outer_height: window.outerHeight,
+            inner_width: currentWidth,
+            inner_height: currentHeight,
+            width_gap: widthGap,
+            height_gap: heightGap,
+          },
+        });
+      }
+    };
+
+    const onResize = () => maybeWarnSuspiciousResize("resize");
+    const intervalId = window.setInterval(() => maybeWarnSuspiciousResize("interval"), 2200);
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.clearInterval(intervalId);
+    };
   }, [addIntegrityWarning, test]);
 
   const updateAnswer = useCallback((questionId: number, value: Record<string, unknown>) => {
@@ -466,6 +565,8 @@ export default function TestRunnerPage() {
 
   useEffect(() => {
     return () => {
+      Object.values(pasteShortcutTimerRef.current).forEach((timerId) => window.clearTimeout(timerId));
+      pasteShortcutTimerRef.current = {};
       stopAudio();
       stopOralRecognition(true);
     };
@@ -581,6 +682,14 @@ export default function TestRunnerPage() {
 
   const handleTextPaste = useCallback(
     (questionId: number, pastedLength: number) => {
+      const now = Date.now();
+      pasteEventAtRef.current[questionId] = now;
+      const pendingTimer = pasteShortcutTimerRef.current[questionId];
+      if (pendingTimer) {
+        window.clearTimeout(pendingTimer);
+        delete pasteShortcutTimerRef.current[questionId];
+      }
+
       addIntegrityWarning({
         type: "paste_detected",
         question_id: questionId,
@@ -596,15 +705,30 @@ export default function TestRunnerPage() {
     (questionId: number, key: string, ctrlOrMeta: boolean, alt: boolean) => {
       if (!ctrlOrMeta && !alt) return;
       if (key.toLowerCase() !== "v") return;
-      addIntegrityWarning({
-        type: "paste_shortcut",
-        question_id: questionId,
-        details: {
-          key,
-          ctrl_or_meta: ctrlOrMeta,
-          alt,
-        },
-      });
+      const now = Date.now();
+      pasteShortcutAtRef.current[questionId] = now;
+
+      const pendingTimer = pasteShortcutTimerRef.current[questionId];
+      if (pendingTimer) {
+        window.clearTimeout(pendingTimer);
+      }
+
+      pasteShortcutTimerRef.current[questionId] = window.setTimeout(() => {
+        const shortcutAt = pasteShortcutAtRef.current[questionId] || 0;
+        const pasteAt = pasteEventAtRef.current[questionId] || 0;
+        const pasteCapturedForThisShortcut = pasteAt >= shortcutAt && pasteAt - shortcutAt <= 400;
+        if (shortcutAt !== now || pasteCapturedForThisShortcut) return;
+
+        addIntegrityWarning({
+          type: "paste_shortcut",
+          question_id: questionId,
+          details: {
+            key,
+            ctrl_or_meta: ctrlOrMeta,
+            alt,
+          },
+        });
+      }, 260);
     },
     [addIntegrityWarning],
   );
