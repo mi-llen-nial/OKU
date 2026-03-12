@@ -1,10 +1,13 @@
 const ICONS_VERSION = "20260302-2";
 const ILLUSTRATIONS_VERSION = "20260301-2";
+const LOGO_VERSION = "20260312-1";
 
 export const assetPaths = {
   logo: {
-    png: "/assets/logo/logo.png",
-    svg: "/assets/logo/logo.svg",
+    png: `/assets/logo/logo.png?v=${LOGO_VERSION}`,
+    svg: `/assets/logo/logo.svg?v=${LOGO_VERSION}`,
+    textBlack: `/assets/logo/OKU_black.svg?v=${LOGO_VERSION}`,
+    textColor: `/assets/logo/OKU_color.svg?v=${LOGO_VERSION}`,
   },
   icons: {
     plus: `/assets/icons/material-symbols_add-rounded.svg?v=${ICONS_VERSION}`,

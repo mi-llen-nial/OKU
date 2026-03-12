@@ -29,12 +29,10 @@
   object-fit: contain;
 }
 
-.heroBrand {
-  margin: 0;
-  font-size: 96px;
-  line-height: 0.9;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+.heroBrandLogo {
+  width: min(100%, 230px);
+  height: auto;
+  object-fit: contain;
 }
 
 .heroText {

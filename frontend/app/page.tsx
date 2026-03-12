@@ -65,7 +65,7 @@ export default function LandingPage() {
       <main className={styles.main}>
         <section className={styles.hero}>
           <img alt="OKU" className={styles.heroLogo} src={assetPaths.logo.svg} />
-          <h1 className={styles.heroBrand}>OKU</h1>
+          <img alt="OKU" className={styles.heroBrandLogo} src={assetPaths.logo.textBlack} />
           <p className={styles.heroText}>
             {t(
               "Единая платформа превращающая тестирование в инструмент обучения",

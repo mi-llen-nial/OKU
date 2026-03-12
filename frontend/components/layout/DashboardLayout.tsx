@@ -83,22 +83,53 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.innerWidth > 1024) return;
-
     const html = document.documentElement;
     const body = document.body;
+    if (window.innerWidth > 1024) {
+      html.classList.remove(MOBILE_NAV_LOCK_CLASS);
+      body.classList.remove(MOBILE_NAV_LOCK_CLASS);
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.width = "";
+      return;
+    }
 
     if (mobileOpen) {
+      const scrollY = window.scrollY;
+      body.dataset.mobileNavScrollY = String(scrollY);
       html.classList.add(MOBILE_NAV_LOCK_CLASS);
       body.classList.add(MOBILE_NAV_LOCK_CLASS);
+      body.style.position = "fixed";
+      body.style.top = `-${scrollY}px`;
+      body.style.left = "0";
+      body.style.right = "0";
+      body.style.width = "100%";
     } else {
       html.classList.remove(MOBILE_NAV_LOCK_CLASS);
       body.classList.remove(MOBILE_NAV_LOCK_CLASS);
+      const savedScrollY = Number(body.dataset.mobileNavScrollY || "0");
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.width = "";
+      if (savedScrollY > 0) {
+        window.scrollTo(0, savedScrollY);
+      }
+      delete body.dataset.mobileNavScrollY;
     }
 
     return () => {
       html.classList.remove(MOBILE_NAV_LOCK_CLASS);
       body.classList.remove(MOBILE_NAV_LOCK_CLASS);
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.width = "";
+      delete body.dataset.mobileNavScrollY;
     };
   }, [mobileOpen]);
 
@@ -221,7 +252,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className={styles.brand}>
           <img alt="Логотип OKU" className={styles.logo} src={assetPaths.logo.svg} />
           <div className={styles.brandText}>
-            <strong>OKU</strong>
+            <img alt="OKU" className={styles.brandWordmark} src={assetPaths.logo.textColor} />
           </div>
         </div>
 

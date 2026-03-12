@@ -1,6 +1,7 @@
 .frame {
   min-height: 100vh;
   display: block;
+  overscroll-behavior: none;
 }
 
 .sidebar {
@@ -47,15 +48,17 @@
   display: flex;
   align-items: center;
   line-height: 1;
-  max-width: 140px;
+  max-width: 148px;
   opacity: 1;
   overflow: hidden;
   transition: max-width 0.2s ease, opacity 0.2s ease;
 }
 
-.brandText strong {
-  font-size: 1.02rem;
-  letter-spacing: 0.01em;
+.brandWordmark {
+  width: 92px;
+  height: auto;
+  object-fit: contain;
+  flex: 0 0 auto;
 }
 
 .sidebarCollapsed .brandText {
@@ -144,6 +147,7 @@
   margin-left: 248px;
   min-height: 100vh;
   transition: margin-left 0.24s ease;
+  overscroll-behavior-y: none;
 }
 
 .sidebarCollapsed ~ .main {
@@ -309,6 +313,7 @@
   transition: transform 0.22s ease;
   overscroll-behavior: contain;
   will-change: transform;
+  background: #ffffff;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -360,6 +365,7 @@
     margin-left: 0 !important;
     width: 100%;
     padding-top: 58px;
+    min-height: 100dvh;
   }
 
   .sidebarCollapsed ~ .main {
