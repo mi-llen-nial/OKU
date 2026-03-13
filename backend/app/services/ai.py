@@ -1468,6 +1468,12 @@ Seed уникальности: {seed}
         weak_topics: list[str],
     ) -> RecommendationPayload:
         subject_name = subject.name_ru if language == PreferredLanguage.ru else subject.name_kz
+        language_name = "русский" if language == PreferredLanguage.ru else "казахский"
+        language_hard_rule = (
+            "Весь текст должен быть строго на русском языке."
+            if language == PreferredLanguage.ru
+            else "Весь текст должен быть строго на казахском языке. Не используй русский язык."
+        )
         prompt = f"""
 Верни JSON без markdown:
 {{
@@ -1480,7 +1486,8 @@ Seed уникальности: {seed}
 Требования:
 - Предмет: {subject_name}
 - Слабые темы: {", ".join(weak_topics)}
-- Язык: {language.value}
+- Язык: {language_name}
+- {language_hard_rule}
 - Дай краткий совет и ровно 5 дополнительных заданий по слабым темам.
 """.strip()
 
@@ -1489,7 +1496,75 @@ Seed уникальности: {seed}
         tasks = data.get("generated_tasks", [])[:5]
         if len(tasks) < 5:
             raise ValueError("Недостаточно сгенерированных заданий")
-        return RecommendationPayload(advice_text=data.get("advice_text", ""), generated_tasks=tasks)
+        advice = str(data.get("advice_text", "")).strip()
+        if not advice:
+            raise ValueError("Пустой совет в рекомендациях")
+        if not self._looks_like_target_language(text=advice, language=language):
+            raise ValueError(f"Модель вернула рекомендации не на целевом языке: {language.value}")
+
+        validated_tasks: list[dict[str, str]] = []
+        for raw_task in tasks:
+            if not isinstance(raw_task, dict):
+                continue
+            topic = str(raw_task.get("topic", "")).strip()
+            task_text = str(raw_task.get("task", "")).strip()
+            difficulty = str(raw_task.get("difficulty", "adaptive")).strip() or "adaptive"
+            if not topic or not task_text:
+                continue
+            if not self._looks_like_target_language(text=f"{topic}. {task_text}", language=language):
+                raise ValueError(f"Модель вернула задания не на целевом языке: {language.value}")
+            validated_tasks.append({"topic": topic, "task": task_text, "difficulty": difficulty})
+
+        if len(validated_tasks) < 5:
+            raise ValueError("Недостаточно валидных заданий после проверки языка")
+
+        return RecommendationPayload(advice_text=advice, generated_tasks=validated_tasks[:5])
+
+    @staticmethod
+    def _looks_like_target_language(*, text: str, language: PreferredLanguage) -> bool:
+        normalized = f" {str(text or '').lower()} "
+        if not normalized.strip():
+            return False
+
+        # Kazakh has distinctive letters and common markers. If none are present and
+        # Russian markers dominate, treat as wrong language and fallback to deterministic templates.
+        if language == PreferredLanguage.kz:
+            kz_letters = ("ә", "і", "ң", "ғ", "ү", "ұ", "қ", "ө", "һ")
+            kz_markers = (
+                " және ",
+                " үшін ",
+                " бойынша ",
+                " тақырып ",
+                " сұрақ ",
+                " қайталау ",
+                " ұсыныс ",
+                " нәтиже ",
+                " пән ",
+                " тапсырма ",
+            )
+            ru_markers = (
+                " для ",
+                " и ",
+                " по ",
+                " тема ",
+                " вопрос ",
+                " повтор",
+                " рекомендац",
+                " результат ",
+                " предмет ",
+                " задание ",
+            )
+            has_kz_signal = any(letter in normalized for letter in kz_letters) or any(marker in normalized for marker in kz_markers)
+            has_ru_signal = any(marker in normalized for marker in ru_markers)
+            if has_kz_signal:
+                return True
+            return not has_ru_signal
+
+        # For Russian recommendations just require cyrillic and avoid obvious kazakh-only markers dominance.
+        ru_cyrillic = re.search(r"[а-яё]", normalized) is not None
+        kz_only_letters = ("ә", "і", "ң", "ғ", "ү", "ұ", "қ", "ө", "һ")
+        kz_only_hits = sum(1 for letter in kz_only_letters if letter in normalized)
+        return ru_cyrillic and kz_only_hits <= 1
 
     def _call_llm(
         self,

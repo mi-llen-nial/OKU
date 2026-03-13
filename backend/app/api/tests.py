@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import date, datetime, timezone
 from io import BytesIO
+import logging
 import re
 from typing import Any
 
@@ -48,10 +49,12 @@ from app.schemas.tests import (
 )
 from app.services.cache import cache
 from app.services.ai import RecommendationPayload, ai_service
+from app.services.custom_tests import normalize_custom_test_time_limit_seconds
 from app.services.evaluation import evaluate_answers
 from app.services.tts import TTSProviderUnavailableError, TTSServiceError, tts_service
 
 router = APIRouter(prefix="/tests", tags=["tests"])
+logger = logging.getLogger(__name__)
 
 
 def _invalidate_student_dashboard_cache(student_id: int) -> None:
@@ -59,6 +62,9 @@ def _invalidate_student_dashboard_cache(student_id: int) -> None:
         f"student:{student_id}:history:v1",
         f"student:{student_id}:progress:v1",
         f"student:{student_id}:dashboard:v1",
+        f"student:{student_id}:history:v2",
+        f"student:{student_id}:progress:v2",
+        f"student:{student_id}:dashboard:v2",
         f"student:{student_id}:group-tests:v2",
     )
 
@@ -268,7 +274,7 @@ def generate_test_from_custom_template(
     db.add(
         TestSession(
             test_id=test.id,
-            time_limit_seconds=max(60, int(custom_test.time_limit_seconds)),
+            time_limit_seconds=max(60, normalize_custom_test_time_limit_seconds(custom_test.time_limit_seconds)),
             warning_limit=max(0, int(custom_test.warning_limit)),
             exam_kind="group_custom",
             exam_config_json={
@@ -834,17 +840,24 @@ def submit_test(
     )
     db.add(result)
 
-    recommendation_payload, recommendation_weak_topics = _build_personalized_recommendation(
+    recommendation_payloads, recommendation_weak_topics = _build_bilingual_recommendation(
         test=test,
         percent=percent,
         warning_count=session.warning_count,
         weak_topics=evaluation.weak_topics,
     )
+    recommendation_payload = recommendation_payloads[test.language]
+    recommendation_payload_ru = recommendation_payloads[PreferredLanguage.ru]
+    recommendation_payload_kz = recommendation_payloads[PreferredLanguage.kz]
     recommendation = Recommendation(
         test_id=test.id,
         weak_topics_json=recommendation_weak_topics,
         advice_text=recommendation_payload.advice_text,
+        advice_text_ru=recommendation_payload_ru.advice_text,
+        advice_text_kz=recommendation_payload_kz.advice_text,
         generated_tasks_json=recommendation_payload.generated_tasks,
+        generated_tasks_ru_json=recommendation_payload_ru.generated_tasks,
+        generated_tasks_kz_json=recommendation_payload_kz.generated_tasks,
     )
     db.add(recommendation)
 
@@ -861,6 +874,10 @@ def submit_test(
             weak_topics=recommendation_weak_topics,
             advice_text=recommendation_payload.advice_text,
             generated_tasks=recommendation_payload.generated_tasks,
+            advice_text_ru=recommendation_payload_ru.advice_text,
+            advice_text_kz=recommendation_payload_kz.advice_text,
+            generated_tasks_ru=recommendation_payload_ru.generated_tasks,
+            generated_tasks_kz=recommendation_payload_kz.generated_tasks,
         ),
     )
 
@@ -873,21 +890,23 @@ def get_test_result(test_id: int, db: DBSession, current_user: CurrentUser) -> T
     if not test.result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Результат не найден")
 
+    _ensure_bilingual_recommendation(db=db, test=test)
+
     persisted_feedback, fallback_weak_topics = _build_feedback_from_persisted_answers(test)
     recommendation = test.recommendation
     session = test.session
     warning_events = _normalize_warning_events_json(session.warning_events_json if session else [])
+    recommendation_payload = _build_recommendation_response_payload(
+        recommendation=recommendation,
+        fallback_weak_topics=fallback_weak_topics,
+    )
     return TestResultDetailsResponse(
         test_id=test.id,
         submitted_at=test.result.created_at,
         result=_build_result_response(result=test.result, session=session),
         integrity_warnings=warning_events,
         feedback=persisted_feedback,
-        recommendation=RecommendationResponse(
-            weak_topics=list(recommendation.weak_topics_json if recommendation else fallback_weak_topics),
-            advice_text=(recommendation.advice_text if recommendation else ""),
-            generated_tasks=list(recommendation.generated_tasks_json if recommendation else []),
-        ),
+        recommendation=RecommendationResponse(**recommendation_payload),
     )
 
 
@@ -907,16 +926,23 @@ def regenerate_recommendations(
     current_weak_topics = list(test.recommendation.weak_topics_json)
     warning_count = int(test.session.warning_count if test.session else 0)
     percent = float(test.result.percent if test.result else 0.0)
-    generated, weak_topics = _build_personalized_recommendation(
+    recommendation_payloads, weak_topics = _build_bilingual_recommendation(
         test=test,
         percent=percent,
         warning_count=warning_count,
         weak_topics=current_weak_topics,
     )
+    generated = recommendation_payloads[test.language]
+    generated_ru = recommendation_payloads[PreferredLanguage.ru]
+    generated_kz = recommendation_payloads[PreferredLanguage.kz]
 
     test.recommendation.weak_topics_json = weak_topics
     test.recommendation.advice_text = generated.advice_text
+    test.recommendation.advice_text_ru = generated_ru.advice_text
+    test.recommendation.advice_text_kz = generated_kz.advice_text
     test.recommendation.generated_tasks_json = generated.generated_tasks
+    test.recommendation.generated_tasks_ru_json = generated_ru.generated_tasks
+    test.recommendation.generated_tasks_kz_json = generated_kz.generated_tasks
     db.commit()
     _invalidate_student_dashboard_cache(current_user.id)
 
@@ -924,7 +950,189 @@ def regenerate_recommendations(
         weak_topics=weak_topics,
         advice_text=generated.advice_text,
         generated_tasks=generated.generated_tasks,
+        advice_text_ru=generated_ru.advice_text,
+        advice_text_kz=generated_kz.advice_text,
+        generated_tasks_ru=generated_ru.generated_tasks,
+        generated_tasks_kz=generated_kz.generated_tasks,
     )
+
+
+def _build_recommendation_response_payload(
+    *,
+    recommendation: Recommendation | None,
+    fallback_weak_topics: list[str],
+) -> dict[str, Any]:
+    if not recommendation:
+        return {
+            "weak_topics": list(fallback_weak_topics),
+            "advice_text": "",
+            "generated_tasks": [],
+            "advice_text_ru": "",
+            "advice_text_kz": "",
+            "generated_tasks_ru": [],
+            "generated_tasks_kz": [],
+        }
+
+    advice_text_ru = (
+        str(recommendation.advice_text_ru).strip()
+        if recommendation.advice_text_ru is not None
+        else str(recommendation.advice_text).strip()
+    )
+    advice_text_kz = (
+        str(recommendation.advice_text_kz).strip()
+        if recommendation.advice_text_kz is not None
+        else advice_text_ru
+    )
+    generated_tasks_legacy = (
+        list(recommendation.generated_tasks_json)
+        if isinstance(recommendation.generated_tasks_json, list)
+        else []
+    )
+    generated_tasks_ru = (
+        list(recommendation.generated_tasks_ru_json)
+        if isinstance(recommendation.generated_tasks_ru_json, list)
+        else list(generated_tasks_legacy)
+    )
+    generated_tasks_kz = (
+        list(recommendation.generated_tasks_kz_json)
+        if isinstance(recommendation.generated_tasks_kz_json, list)
+        else list(generated_tasks_ru)
+    )
+
+    # Keep legacy fields for backward compatibility with older clients.
+    return {
+        "weak_topics": list(recommendation.weak_topics_json) if isinstance(recommendation.weak_topics_json, list) else list(fallback_weak_topics),
+        "advice_text": str(recommendation.advice_text or ""),
+        "generated_tasks": generated_tasks_legacy,
+        "advice_text_ru": advice_text_ru,
+        "advice_text_kz": advice_text_kz,
+        "generated_tasks_ru": generated_tasks_ru,
+        "generated_tasks_kz": generated_tasks_kz,
+    }
+
+
+def _ensure_bilingual_recommendation(*, db: DBSession, test: Test) -> None:
+    recommendation = test.recommendation
+    if not recommendation:
+        return
+    if not test.result:
+        return
+
+    has_ru = bool(str(recommendation.advice_text_ru or "").strip()) and isinstance(recommendation.generated_tasks_ru_json, list)
+    has_kz = bool(str(recommendation.advice_text_kz or "").strip()) and isinstance(recommendation.generated_tasks_kz_json, list)
+    has_distinct_locales = _recommendation_locales_look_distinct(recommendation)
+    if has_ru and has_kz and has_distinct_locales:
+        return
+
+    warning_count = int(test.session.warning_count if test.session else 0)
+    percent = float(test.result.percent)
+    weak_topics = list(recommendation.weak_topics_json or [])
+    try:
+        payloads, _ = _build_bilingual_recommendation(
+            test=test,
+            percent=percent,
+            warning_count=warning_count,
+            weak_topics=weak_topics,
+        )
+        payload_ru = payloads[PreferredLanguage.ru]
+        payload_kz = payloads[PreferredLanguage.kz]
+        recommendation.advice_text_ru = payload_ru.advice_text
+        recommendation.advice_text_kz = payload_kz.advice_text
+        recommendation.generated_tasks_ru_json = payload_ru.generated_tasks
+        recommendation.generated_tasks_kz_json = payload_kz.generated_tasks
+        if test.language == PreferredLanguage.kz:
+            recommendation.advice_text = payload_kz.advice_text
+            recommendation.generated_tasks_json = payload_kz.generated_tasks
+        else:
+            recommendation.advice_text = payload_ru.advice_text
+            recommendation.generated_tasks_json = payload_ru.generated_tasks
+        db.commit()
+        db.refresh(test)
+    except Exception as exc:  # noqa: BLE001
+        # Keep backward compatibility: if bilingual build fails, return legacy recommendation as-is.
+        logger.warning("Failed to refresh bilingual recommendation for test_id=%s: %s", test.id, exc)
+        db.rollback()
+
+
+def _build_bilingual_recommendation(
+    *,
+    test: Test,
+    percent: float,
+    warning_count: int,
+    weak_topics: list[str],
+) -> tuple[dict[PreferredLanguage, RecommendationPayload], list[str]]:
+    primary_language = test.language
+    secondary_language = PreferredLanguage.kz if primary_language == PreferredLanguage.ru else PreferredLanguage.ru
+
+    primary_payload, primary_topics = _build_personalized_recommendation(
+        test=test,
+        percent=percent,
+        warning_count=warning_count,
+        weak_topics=weak_topics,
+        target_language=primary_language,
+    )
+    try:
+        secondary_payload, _ = _build_personalized_recommendation(
+            test=test,
+            percent=percent,
+            warning_count=warning_count,
+            weak_topics=primary_topics,
+            target_language=secondary_language,
+        )
+    except Exception:  # noqa: BLE001
+        secondary_payload = ai_service.generate_recommendation(
+            subject=test.subject,
+            language=secondary_language,
+            weak_topics=primary_topics or [str(topic).strip() for topic in weak_topics if str(topic).strip()],
+        )
+
+    if _recommendation_payloads_look_identical(primary_payload, secondary_payload):
+        secondary_payload = ai_service._generate_recommendation_mock(  # type: ignore[attr-defined]
+            subject=test.subject,
+            language=secondary_language,
+            weak_topics=primary_topics or [str(topic).strip() for topic in weak_topics if str(topic).strip()],
+        )
+
+    payloads: dict[PreferredLanguage, RecommendationPayload] = {
+        primary_language: primary_payload,
+        secondary_language: secondary_payload,
+    }
+    return payloads, primary_topics
+
+
+def _recommendation_payloads_look_identical(first: RecommendationPayload, second: RecommendationPayload) -> bool:
+    if (first.advice_text or "").strip() != (second.advice_text or "").strip():
+        return False
+    first_tasks = first.generated_tasks if isinstance(first.generated_tasks, list) else []
+    second_tasks = second.generated_tasks if isinstance(second.generated_tasks, list) else []
+    if len(first_tasks) != len(second_tasks):
+        return False
+    for left, right in zip(first_tasks, second_tasks):
+        if not isinstance(left, dict) or not isinstance(right, dict):
+            return False
+        left_topic = str(left.get("topic", "")).strip()
+        right_topic = str(right.get("topic", "")).strip()
+        left_task = str(left.get("task", "")).strip()
+        right_task = str(right.get("task", "")).strip()
+        left_difficulty = str(left.get("difficulty", "")).strip()
+        right_difficulty = str(right.get("difficulty", "")).strip()
+        if (left_topic, left_task, left_difficulty) != (right_topic, right_task, right_difficulty):
+            return False
+    return True
+
+
+def _recommendation_locales_look_distinct(recommendation: Recommendation) -> bool:
+    advice_ru = str(recommendation.advice_text_ru or "").strip()
+    advice_kz = str(recommendation.advice_text_kz or "").strip()
+    tasks_ru = recommendation.generated_tasks_ru_json if isinstance(recommendation.generated_tasks_ru_json, list) else []
+    tasks_kz = recommendation.generated_tasks_kz_json if isinstance(recommendation.generated_tasks_kz_json, list) else []
+    if not advice_ru or not advice_kz:
+        return False
+    if advice_ru != advice_kz:
+        return True
+    if tasks_ru != tasks_kz:
+        return True
+    return False
 
 
 def _build_personalized_recommendation(
@@ -933,23 +1141,25 @@ def _build_personalized_recommendation(
     percent: float,
     warning_count: int,
     weak_topics: list[str],
+    target_language: PreferredLanguage | None = None,
 ) -> tuple[RecommendationPayload, list[str]]:
+    recommendation_language = target_language or test.language
     clean_topics = [str(topic).strip() for topic in weak_topics if str(topic).strip()]
     exam_kind = str(test.session.exam_kind or "").strip().lower() if test.session else ""
 
     if exam_kind in {"ent", "ielts"}:
         return _build_exam_recommendation(
             exam_kind=exam_kind,
-            language=test.language,
+            language=recommendation_language,
             percent=percent,
             warning_count=warning_count,
             weak_topics=clean_topics,
         )
 
-    subject_name = test.subject.name_ru if test.language == PreferredLanguage.ru else test.subject.name_kz
+    subject_name = test.subject.name_ru if recommendation_language == PreferredLanguage.ru else test.subject.name_kz
 
     if percent >= 99.9 and warning_count == 0:
-        if test.language == PreferredLanguage.kz:
+        if recommendation_language == PreferredLanguage.kz:
             advice = (
                 "Керемет нәтиже! Тестті өте сенімді әрі адал орындадыңыз. "
                 "Келесі қадам ретінде деңгейді көтеріп немесе сұрақ санын көбейтіп көріңіз."
@@ -976,7 +1186,7 @@ def _build_personalized_recommendation(
         return RecommendationPayload(advice_text=advice, generated_tasks=tasks), []
 
     if percent >= 90 and warning_count > 0:
-        if test.language == PreferredLanguage.kz:
+        if recommendation_language == PreferredLanguage.kz:
             advice = (
                 f"Нәтиже жоғары ({round(percent, 1)}%), бірақ тестте {warning_count} ескерту тіркелді. "
                 "Оқу тиімді болуы үшін келесі тестті адал форматта, сыртқы көмексіз өтіп көріңіз."
@@ -1004,7 +1214,7 @@ def _build_personalized_recommendation(
 
     generated = ai_service.generate_recommendation(
         subject=test.subject,
-        language=test.language,
+        language=recommendation_language,
         weak_topics=clean_topics,
     )
     return generated, clean_topics

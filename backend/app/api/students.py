@@ -21,6 +21,7 @@ from app.schemas.tests import (
     StudentProgressResponse,
 )
 from app.services.cache import cache
+from app.services.custom_tests import custom_test_duration_minutes
 from app.services.progress import build_student_history, build_student_progress
 
 router = APIRouter(prefix="/students/me", tags=["students"])
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/students/me", tags=["students"])
 
 @router.get("/history", response_model=list[HistoryItemResponse])
 def my_history(db: DBSession, current_user: User = Depends(require_role(UserRole.student))) -> list[HistoryItemResponse]:
-    cache_key = f"student:{current_user.id}:history:v1"
+    cache_key = f"student:{current_user.id}:history:v2"
     cached = cache.get_json(cache_key)
     if isinstance(cached, list):
         return [HistoryItemResponse.model_validate(item) for item in cached]
@@ -40,7 +41,7 @@ def my_history(db: DBSession, current_user: User = Depends(require_role(UserRole
 
 @router.get("/progress", response_model=StudentProgressResponse)
 def my_progress(db: DBSession, current_user: User = Depends(require_role(UserRole.student))) -> StudentProgressResponse:
-    cache_key = f"student:{current_user.id}:progress:v1"
+    cache_key = f"student:{current_user.id}:progress:v2"
     cached = cache.get_json(cache_key)
     if isinstance(cached, dict):
         return StudentProgressResponse.model_validate(cached)
@@ -52,7 +53,7 @@ def my_progress(db: DBSession, current_user: User = Depends(require_role(UserRol
 
 @router.get("/dashboard", response_model=StudentDashboardResponse)
 def my_dashboard(db: DBSession, current_user: User = Depends(require_role(UserRole.student))) -> StudentDashboardResponse:
-    cache_key = f"student:{current_user.id}:dashboard:v1"
+    cache_key = f"student:{current_user.id}:dashboard:v2"
     cached = cache.get_json(cache_key)
     if isinstance(cached, dict):
         return StudentDashboardResponse.model_validate(cached)
@@ -139,7 +140,7 @@ def my_group_tests(db: DBSession, current_user: User = Depends(require_role(User
                 custom_test_id=custom_test.id,
                 title=custom_test.title,
                 questions_count=len(custom_test.questions),
-                duration_minutes=max(1, custom_test.time_limit_seconds // 60),
+                duration_minutes=custom_test_duration_minutes(custom_test.time_limit_seconds),
                 warning_limit=int(custom_test.warning_limit or 0),
                 teacher_name=(custom_test.teacher.full_name or custom_test.teacher.username),
                 group_id=group.id,

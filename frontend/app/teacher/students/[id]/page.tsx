@@ -131,11 +131,11 @@ export default function TeacherStudentAnalyticsPage() {
     if (history.length === 0) return t("Нет данных", "Дерек жоқ");
     const counter = new Map<string, number>();
     for (const item of history) {
-      const title = attemptTitle(item);
+      const title = attemptTitle(item, uiLanguage);
       counter.set(title, (counter.get(title) || 0) + 1);
     }
     return [...counter.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] || t("Нет данных", "Дерек жоқ");
-  }, [history, t]);
+  }, [history, t, uiLanguage]);
 
   const alignmentPercent = useMemo(() => {
     const avg = progress?.avg_percent ?? 0;
@@ -182,7 +182,7 @@ export default function TeacherStudentAnalyticsPage() {
         id: "best",
         label: t("Лучший результат", "Ең үздік нәтиже"),
         meta: bestAttempt
-          ? `${attemptTitle(bestAttempt)} (${difficultyLabel(bestAttempt.difficulty, uiLanguage)})`
+          ? `${attemptTitle(bestAttempt, uiLanguage)} (${difficultyLabel(bestAttempt.difficulty, uiLanguage)})`
           : t("Пока нет данных", "Әзірге дерек жоқ"),
         value: formatPercent(progress?.best_percent ?? 0),
       },
@@ -202,7 +202,7 @@ export default function TeacherStudentAnalyticsPage() {
         id: "worst",
         label: t("Худший результат", "Ең төмен нәтиже"),
         meta: worstAttempt
-          ? `${attemptTitle(worstAttempt)} (${difficultyLabel(worstAttempt.difficulty, uiLanguage)})`
+          ? `${attemptTitle(worstAttempt, uiLanguage)} (${difficultyLabel(worstAttempt.difficulty, uiLanguage)})`
           : t("Пока нет данных", "Әзірге дерек жоқ"),
         value: worstAttempt ? formatPercent(worstAttempt.percent) : "–",
       },
@@ -247,50 +247,62 @@ export default function TeacherStudentAnalyticsPage() {
   ]);
 
   const subjectMetrics = useMemo<SubjectMetricItem[]>(() => {
-    const byNormalizedName = new Map<string, number>();
-    for (const item of progress?.subject_stats || []) {
-      byNormalizedName.set(normalizeName(item.subject_name), item.avg_percent);
+    const stats = progress?.subject_stats || [];
+    const statsBySubjectId = new Map(
+      stats.map((item) => [
+        item.subject_id,
+        {
+          percent: item.avg_percent,
+        },
+      ]),
+    );
+
+    if (subjects.length > 0) {
+      const metrics = subjects.map((subject) => {
+        const title =
+          uiLanguage === "KZ"
+            ? subject.name_kz || subject.name_ru || `Пән #${subject.id}`
+            : subject.name_ru || subject.name_kz || `Предмет #${subject.id}`;
+        const stat = statsBySubjectId.get(subject.id);
+        return {
+          id: String(subject.id),
+          name: title,
+          value: stat ? formatPercent(stat.percent) : "–",
+        };
+      });
+
+      for (const stat of stats) {
+        if (subjects.some((subject) => subject.id === stat.subject_id)) continue;
+        const title =
+          uiLanguage === "KZ"
+            ? stat.subject_name_kz || stat.subject_name_ru || stat.subject_name
+            : stat.subject_name_ru || stat.subject_name_kz || stat.subject_name;
+        metrics.push({
+          id: String(stat.subject_id),
+          name: title,
+          value: formatPercent(stat.avg_percent),
+        });
+      }
+      return metrics;
     }
 
-    const allNames: string[] = [];
-    const seen = new Set<string>();
-
-    const namesFromApi =
-      subjects.length > 0
-        ? subjects.map((subject) => {
-            if (uiLanguage === "KZ") {
-              return subject.name_kz || subject.name_ru || `Пән #${subject.id}`;
-            }
-            return subject.name_ru || subject.name_kz || `Предмет #${subject.id}`;
-          })
-        : uiLanguage === "KZ"
-          ? SUBJECT_FALLBACK_KZ
-          : SUBJECT_FALLBACK_RU;
-
-    for (const name of namesFromApi) {
-      const key = normalizeName(name);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      allNames.push(name);
+    if (stats.length > 0) {
+      return stats.map((stat) => ({
+        id: String(stat.subject_id),
+        name:
+          uiLanguage === "KZ"
+            ? stat.subject_name_kz || stat.subject_name_ru || stat.subject_name
+            : stat.subject_name_ru || stat.subject_name_kz || stat.subject_name,
+        value: formatPercent(stat.avg_percent),
+      }));
     }
 
-    for (const item of progress?.subject_stats || []) {
-      const key = normalizeName(item.subject_name);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      allNames.push(item.subject_name);
-    }
-
-    return allNames.map((subject) => {
-      const normalizedSubject = normalizeName(subject);
-      const hasResult = byNormalizedName.has(normalizedSubject);
-      const value = byNormalizedName.get(normalizedSubject);
-      return {
-        id: normalizedSubject,
-        name: subject,
-        value: hasResult && typeof value === "number" ? formatPercent(value) : "–",
-      };
-    });
+    const fallbackNames = uiLanguage === "KZ" ? SUBJECT_FALLBACK_KZ : SUBJECT_FALLBACK_RU;
+    return fallbackNames.map((subject, index) => ({
+      id: `fallback-${index}`,
+      name: subject,
+      value: "–",
+    }));
   }, [progress?.subject_stats, subjects, uiLanguage]);
 
   const exportRows = useMemo(() => {
@@ -405,10 +417,16 @@ function difficultyLabel(value: HistoryItem["difficulty"], language: Language): 
   return tr(language, "Средний", "Орташа");
 }
 
-function attemptTitle(item: Pick<HistoryItem, "subject_name" | "exam_kind">): string {
+function attemptTitle(
+  item: Pick<HistoryItem, "subject_name" | "subject_name_ru" | "subject_name_kz" | "exam_kind">,
+  language: Language,
+): string {
   if (item.exam_kind === "ielts") return "IELTS";
-  if (item.exam_kind === "ent") return "ЕНТ";
-  return item.subject_name;
+  if (item.exam_kind === "ent") return tr(language, "ЕНТ", "ҰБТ");
+  if (language === "KZ") {
+    return item.subject_name_kz || item.subject_name_ru || item.subject_name;
+  }
+  return item.subject_name_ru || item.subject_name_kz || item.subject_name;
 }
 
 function formatPercent(value: number): string {

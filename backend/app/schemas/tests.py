@@ -124,6 +124,10 @@ class RecommendationResponse(BaseModel):
     weak_topics: list[str]
     advice_text: str
     generated_tasks: list[dict[str, Any]]
+    advice_text_ru: str | None = None
+    advice_text_kz: str | None = None
+    generated_tasks_ru: list[dict[str, Any]] | None = None
+    generated_tasks_kz: list[dict[str, Any]] | None = None
 
 
 class SubmitTestResponse(BaseModel):
@@ -147,6 +151,8 @@ class HistoryItemResponse(BaseModel):
     test_id: int
     subject_id: int
     subject_name: str
+    subject_name_ru: str | None = None
+    subject_name_kz: str | None = None
     exam_kind: str | None = None
     difficulty: DifficultyLevel
     language: PreferredLanguage
@@ -165,6 +171,8 @@ class ProgressPoint(BaseModel):
 class SubjectStat(BaseModel):
     subject_id: int
     subject_name: str
+    subject_name_ru: str | None = None
+    subject_name_kz: str | None = None
     tests_count: int
     avg_percent: float
 

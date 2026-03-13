@@ -113,8 +113,31 @@ export default function ResultPage() {
     : `${difficultyLabel(testMeta?.difficulty, uiLanguage)} ${languageLabel(testMeta?.language, uiLanguage)}`;
   const modeMetricLabel = (examName || isTeacherCustomTest) ? `${t("Формат", "Формат")}:` : `${t("Сложность", "Күрделілік")}:`;
   const modeMetricValue = examName || (isTeacherCustomTest ? (customTestTitle || t("Групповой тест", "Топтық тест")) : difficultyLabel(testMeta?.difficulty, uiLanguage));
-  const recommendationText =
-    data?.recommendation.advice_text.trim() || t("Рекомендации временно недоступны. Повторите тест или откройте историю попыток.", "Ұсыныстар уақытша қолжетімсіз. Тестті қайта өтіңіз немесе талпыныстар тарихын ашыңыз.");
+  const recommendationText = useMemo(() => {
+    if (!data) {
+      return t(
+        "Рекомендации временно недоступны. Повторите тест или откройте историю попыток.",
+        "Ұсыныстар уақытша қолжетімсіз. Тестті қайта өтіңіз немесе талпыныстар тарихын ашыңыз.",
+      );
+    }
+    const text =
+      uiLanguage === "KZ"
+        ? data.recommendation.advice_text_kz?.trim() || data.recommendation.advice_text_ru?.trim() || data.recommendation.advice_text.trim()
+        : data.recommendation.advice_text_ru?.trim() || data.recommendation.advice_text_kz?.trim() || data.recommendation.advice_text.trim();
+    return text
+      || t(
+        "Рекомендации временно недоступны. Повторите тест или откройте историю попыток.",
+        "Ұсыныстар уақытша қолжетімсіз. Тестті қайта өтіңіз немесе талпыныстар тарихын ашыңыз.",
+      );
+  }, [data, t, uiLanguage]);
+  const recommendationTasks = useMemo(() => {
+    if (!data) return [];
+    const localized = uiLanguage === "KZ" ? data.recommendation.generated_tasks_kz : data.recommendation.generated_tasks_ru;
+    if (Array.isArray(localized) && localized.length > 0) {
+      return localized;
+    }
+    return data.recommendation.generated_tasks;
+  }, [data, uiLanguage]);
   const questionMap = useMemo(() => {
     const map = new Map<number, Question>();
     for (const question of testMeta?.questions || []) {
@@ -202,9 +225,9 @@ export default function ResultPage() {
                 <h3 className={styles.recommendationTitle}>{t("Рекомендации", "Ұсыныстар")}</h3>
                 <p className={styles.recommendationSubtitle}>{t("Что повторить и какие задания выполнить дальше.", "Нені қайталау және қандай тапсырмаларды орындау керек.")}</p>
                 <p className={styles.recommendationText}>{recommendationText}</p>
-                {data.recommendation.generated_tasks.length > 0 ? (
+                {recommendationTasks.length > 0 ? (
                   <div className={styles.taskList}>
-                    {data.recommendation.generated_tasks.slice(0, 2).map((task, index) => (
+                    {recommendationTasks.slice(0, 2).map((task, index) => (
                       <p className={styles.taskItem} key={`${task.topic}-${index}`}>
                         <b>{task.topic}:</b> {task.task}
                       </p>

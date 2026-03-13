@@ -105,6 +105,10 @@ export interface Recommendation {
   weak_topics: string[];
   advice_text: string;
   generated_tasks: Array<{ topic: string; task: string; difficulty: string }>;
+  advice_text_ru?: string | null;
+  advice_text_kz?: string | null;
+  generated_tasks_ru?: Array<{ topic: string; task: string; difficulty: string }> | null;
+  generated_tasks_kz?: Array<{ topic: string; task: string; difficulty: string }> | null;
 }
 
 export interface TestResult {
@@ -127,6 +131,8 @@ export interface HistoryItem {
   test_id: number;
   subject_id: number;
   subject_name: string;
+  subject_name_ru?: string | null;
+  subject_name_kz?: string | null;
   exam_kind?: ExamKind | null;
   difficulty: Difficulty;
   language: Language;
@@ -144,7 +150,14 @@ export interface StudentProgress {
   best_percent: number;
   weak_topics: string[];
   trend: Array<{ date: string; percent: number }>;
-  subject_stats: Array<{ subject_id: number; subject_name: string; tests_count: number; avg_percent: number }>;
+  subject_stats: Array<{
+    subject_id: number;
+    subject_name: string;
+    subject_name_ru?: string | null;
+    subject_name_kz?: string | null;
+    tests_count: number;
+    avg_percent: number;
+  }>;
 }
 
 export interface StudentDashboard {

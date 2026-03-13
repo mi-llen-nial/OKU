@@ -22,6 +22,7 @@ import {
   TestResult,
 } from "@/lib/types";
 import { getRefreshToken, getUser, updateAccessToken } from "@/lib/auth";
+import { getUiLanguage } from "@/lib/i18n";
 
 const RAW_API_URL = (process.env.NEXT_PUBLIC_API_URL || "").trim();
 const API_PREFIX = normalizeApiPrefix(process.env.NEXT_PUBLIC_API_PREFIX || "/api/v1");
@@ -286,10 +287,14 @@ async function cachedRequest<T>(
 }
 
 function invalidateStudentCaches(): void {
-  clearCachedKey("history");
-  clearCachedKey("progress");
-  clearCachedKey("dashboard");
+  clearCachedPrefix("history:");
+  clearCachedPrefix("progress:");
+  clearCachedPrefix("dashboard:");
   clearCachedKey("student:group-tests");
+}
+
+function languageAwareCacheKey(baseKey: "history" | "progress" | "dashboard"): string {
+  return `${baseKey}:${getUiLanguage()}`;
 }
 
 function invalidateTeacherCache(options?: {
@@ -752,37 +757,42 @@ export function regenerateRecommendation(token: string, testId: number) {
 }
 
 export function getHistory(token: string) {
-  const cached = readCachedJson<HistoryItem[]>("history", CACHE_TTL.history);
+  const cacheKey = languageAwareCacheKey("history");
+  const cached = readCachedJson<HistoryItem[]>(cacheKey, CACHE_TTL.history);
   if (cached) {
     return Promise.resolve(cached);
   }
   return apiRequest<HistoryItem[]>("/students/me/history", {}, token).then((payload) => {
-    writeCachedJson("history", payload);
+    writeCachedJson(cacheKey, payload);
     return payload;
   });
 }
 
 export function getProgress(token: string) {
-  const cached = readCachedJson<StudentProgress>("progress", CACHE_TTL.progress);
+  const cacheKey = languageAwareCacheKey("progress");
+  const cached = readCachedJson<StudentProgress>(cacheKey, CACHE_TTL.progress);
   if (cached) {
     return Promise.resolve(cached);
   }
   return apiRequest<StudentProgress>("/students/me/progress", {}, token).then((payload) => {
-    writeCachedJson("progress", payload);
+    writeCachedJson(cacheKey, payload);
     return payload;
   });
 }
 
 export function getDashboard(token: string) {
-  const cached = readCachedJson<StudentDashboard>("dashboard", CACHE_TTL.dashboard);
+  const dashboardCacheKey = languageAwareCacheKey("dashboard");
+  const progressCacheKey = languageAwareCacheKey("progress");
+  const historyCacheKey = languageAwareCacheKey("history");
+  const cached = readCachedJson<StudentDashboard>(dashboardCacheKey, CACHE_TTL.dashboard);
   if (cached) {
     return Promise.resolve(cached);
   }
   return apiRequest<StudentDashboard>("/students/me/dashboard", {}, token).then((payload) => {
-    writeCachedJson("dashboard", payload);
+    writeCachedJson(dashboardCacheKey, payload);
     // Keep dedicated caches warm for pages that still call individual endpoints.
-    writeCachedJson("progress", payload.progress);
-    writeCachedJson("history", payload.history);
+    writeCachedJson(progressCacheKey, payload.progress);
+    writeCachedJson(historyCacheKey, payload.history);
     return payload;
   });
 }

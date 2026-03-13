@@ -139,7 +139,7 @@ export default function DashboardPage() {
               <article className={styles.statItem}>
                 <h3 className={styles.statLabel}>{t("Лучший результат", "Ең үздік нәтиже")}</h3>
                 <p className={styles.statMeta}>
-                  {bestAttempt ? `${attemptTitle(bestAttempt)} (${difficultyLabel(bestAttempt.difficulty, uiLanguage)})` : t("Пока нет данных", "Әзірге дерек жоқ")}
+                  {bestAttempt ? `${attemptTitle(bestAttempt, uiLanguage)} (${difficultyLabel(bestAttempt.difficulty, uiLanguage)})` : t("Пока нет данных", "Әзірге дерек жоқ")}
                 </p>
                 <p className={styles.statValue}>{progress?.best_percent ?? 0}%</p>
               </article>
@@ -170,7 +170,7 @@ export default function DashboardPage() {
                 <div className={styles.cardGrid}>
                   {recentAttempts.map((item) => {
                     const scoreClass = resolveScoreClass(item.percent);
-                    const title = attemptTitle(item);
+                    const title = attemptTitle(item, uiLanguage);
 
                     return (
                       <article className={styles.recentCard} key={item.test_id}>
@@ -263,7 +263,7 @@ function normalizeText(value: string): string {
 function resolveSubjectIcon(subjectName: string): string {
   const key = normalizeText(subjectName);
   if (key.includes("ielts")) return assetPaths.icons.ielts;
-  if (key.includes("ент") || key.includes("ent")) return assetPaths.icons.ent;
+  if (key.includes("ент") || key.includes("ұбт") || key.includes("ent") || key.includes("ubt")) return assetPaths.icons.ent;
   if (key.includes("алгебр")) return assetPaths.icons.algebra;
   if (key.includes("геометр")) return assetPaths.icons.geometry;
   if (key.includes("физик")) return assetPaths.icons.physics;
@@ -283,10 +283,16 @@ function difficultyLabel(value: HistoryItem["difficulty"], language: "RU" | "KZ"
   return tr(language, "Средний", "Орташа");
 }
 
-function attemptTitle(item: Pick<HistoryItem, "subject_name" | "exam_kind">): string {
+function attemptTitle(
+  item: Pick<HistoryItem, "subject_name" | "subject_name_ru" | "subject_name_kz" | "exam_kind">,
+  language: "RU" | "KZ",
+): string {
   if (item.exam_kind === "ielts") return "IELTS";
-  if (item.exam_kind === "ent") return "ЕНТ";
-  return item.subject_name;
+  if (item.exam_kind === "ent") return tr(language, "ЕНТ", "ҰБТ");
+  if (language === "KZ") {
+    return item.subject_name_kz || item.subject_name_ru || item.subject_name;
+  }
+  return item.subject_name_ru || item.subject_name_kz || item.subject_name;
 }
 
 function languageLabel(value: HistoryItem["language"], language: "RU" | "KZ"): string {

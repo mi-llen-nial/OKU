@@ -71,6 +71,25 @@ interface OralAnswerControls {
   onStop: () => void;
 }
 
+interface PersistedTestSession {
+  version: 1;
+  test_id: number;
+  started_at_ms: number;
+  current_index: number;
+  answers: AnswerMap;
+  integrity_warnings: TestIntegrityWarning[];
+}
+
+const TEST_SESSION_STORAGE_PREFIX = "oku-test-session:";
+const WARNING_EVENT_COOLDOWN_MS = 1000;
+const WARNING_EVENT_FAMILIES: Record<string, string> = {
+  focus_lost: "environment_change",
+  suspicious_viewport_resize: "environment_change",
+  inspector_open_attempt: "environment_change",
+  paste_detected: "paste_input",
+  paste_shortcut: "paste_input",
+};
+
 export default function TestRunnerPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -93,6 +112,7 @@ export default function TestRunnerPage() {
   const [oralQuestionId, setOralQuestionId] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [integrityWarnings, setIntegrityWarnings] = useState<TestIntegrityWarning[]>([]);
+  const [sessionHydrated, setSessionHydrated] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
@@ -111,6 +131,8 @@ export default function TestRunnerPage() {
   const baselineViewportRef = useRef<{ width: number; height: number } | null>(null);
   const lastResizeWarningAtRef = useRef(0);
   const lastInspectorWarningAtRef = useRef(0);
+  const lastWarningAtByFamilyRef = useRef<Record<string, number>>({});
+  const startedAtMsRef = useRef<number | null>(null);
   const autoSubmittedRef = useRef(false);
 
   useEffect(() => {
@@ -149,12 +171,18 @@ export default function TestRunnerPage() {
         question_id: event.question_id ?? null,
         details: event.details || {},
       };
+      const family = WARNING_EVENT_FAMILIES[next.type] || next.type;
+      const now = Date.now();
+      const lastWarningAt = lastWarningAtByFamilyRef.current[family] || 0;
+      if (now - lastWarningAt < WARNING_EVENT_COOLDOWN_MS) return;
+
       const signature = `${next.type}|${next.question_id ?? "none"}|${next.at_seconds}`;
       const exists = warningsRef.current.some(
         (item) => `${item.type}|${item.question_id ?? "none"}|${item.at_seconds}` === signature,
       );
       if (exists) return;
 
+      lastWarningAtByFamilyRef.current[family] = now;
       const merged = [...warningsRef.current, next];
       warningsRef.current = merged;
       setIntegrityWarnings(merged);
@@ -164,10 +192,32 @@ export default function TestRunnerPage() {
 
   useEffect(() => {
     if (!test) return;
-    setElapsedSeconds(0);
-    elapsedRef.current = 0;
-    setIntegrityWarnings([]);
-    warningsRef.current = [];
+    setSessionHydrated(false);
+
+    const validQuestionIds = new Set(test.questions.map((item) => item.id));
+    const persisted = loadPersistedTestSession(test.id);
+    const persistedAnswers = persisted?.answers || {};
+    const hydratedAnswers = Object.fromEntries(
+      Object.entries(persistedAnswers).filter(([questionId]) => validQuestionIds.has(Number(questionId))),
+    ) as AnswerMap;
+    const hydratedWarnings = (persisted?.integrity_warnings || []).filter((item) =>
+      item.question_id === null || item.question_id === undefined || validQuestionIds.has(item.question_id),
+    );
+    const startedAtMs =
+      persisted && Number.isFinite(persisted.started_at_ms) && persisted.started_at_ms > 0
+        ? persisted.started_at_ms
+        : Date.now();
+    const maxIndex = Math.max(0, test.questions.length - 1);
+    const hydratedIndex = Math.min(Math.max(persisted?.current_index ?? 0, 0), maxIndex);
+    const hydratedElapsed = Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000));
+
+    startedAtMsRef.current = startedAtMs;
+    setAnswers(hydratedAnswers);
+    setCurrentIndex(hydratedIndex);
+    setElapsedSeconds(hydratedElapsed);
+    elapsedRef.current = hydratedElapsed;
+    setIntegrityWarnings(hydratedWarnings);
+    warningsRef.current = hydratedWarnings;
     textFocusAtRef.current = {};
     fastInputFlagRef.current = {};
     lastFocusLossWarningAtRef.current = 0;
@@ -179,15 +229,43 @@ export default function TestRunnerPage() {
     baselineViewportRef.current = null;
     lastResizeWarningAtRef.current = 0;
     lastInspectorWarningAtRef.current = 0;
+    lastWarningAtByFamilyRef.current = {};
     autoSubmittedRef.current = false;
-    const startedAt = Date.now();
+
+    if (!persisted) {
+      persistTestSession({
+        version: 1,
+        test_id: test.id,
+        started_at_ms: startedAtMs,
+        current_index: hydratedIndex,
+        answers: hydratedAnswers,
+        integrity_warnings: hydratedWarnings,
+      });
+    }
+
+    setSessionHydrated(true);
+
     const interval = window.setInterval(() => {
-      const nextElapsed = Math.floor((Date.now() - startedAt) / 1000);
+      if (!startedAtMsRef.current) return;
+      const nextElapsed = Math.max(0, Math.floor((Date.now() - startedAtMsRef.current) / 1000));
       elapsedRef.current = nextElapsed;
       setElapsedSeconds(nextElapsed);
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [test?.id]);
+  }, [test]);
+
+  useEffect(() => {
+    if (!test || !startedAtMsRef.current || !sessionHydrated) return;
+
+    persistTestSession({
+      version: 1,
+      test_id: test.id,
+      started_at_ms: startedAtMsRef.current,
+      current_index: currentIndex,
+      answers,
+      integrity_warnings: integrityWarnings,
+    });
+  }, [answers, currentIndex, elapsedSeconds, integrityWarnings, sessionHydrated, test]);
 
   useEffect(() => {
     if (!test) return;
@@ -613,6 +691,7 @@ export default function TestRunnerPage() {
         stopAudio();
         setSubmitting(true);
         await submitTest(token, test.id, body);
+        clearPersistedTestSession(test.id);
         router.push(`/results/${test.id}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : t("Не удалось отправить тест на проверку", "Тестті тексеруге жіберу мүмкін болмады"));
@@ -1027,6 +1106,54 @@ function renderMatching(
       ))}
     </div>
   );
+}
+
+function getTestSessionStorageKey(testId: number): string {
+  return `${TEST_SESSION_STORAGE_PREFIX}${testId}`;
+}
+
+function loadPersistedTestSession(testId: number): PersistedTestSession | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(getTestSessionStorageKey(testId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PersistedTestSession>;
+    if (parsed.version !== 1 || parsed.test_id !== testId) return null;
+    if (typeof parsed.started_at_ms !== "number" || !Number.isFinite(parsed.started_at_ms)) return null;
+    return {
+      version: 1,
+      test_id: testId,
+      started_at_ms: parsed.started_at_ms,
+      current_index: typeof parsed.current_index === "number" ? parsed.current_index : 0,
+      answers: parsed.answers && typeof parsed.answers === "object" ? (parsed.answers as AnswerMap) : {},
+      integrity_warnings: Array.isArray(parsed.integrity_warnings)
+        ? (parsed.integrity_warnings as TestIntegrityWarning[])
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistTestSession(session: PersistedTestSession): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem(getTestSessionStorageKey(session.test_id), JSON.stringify(session));
+  } catch {
+    // ignore session storage errors
+  }
+}
+
+function clearPersistedTestSession(testId: number): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.removeItem(getTestSessionStorageKey(testId));
+  } catch {
+    // ignore session storage errors
+  }
 }
 
 function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {

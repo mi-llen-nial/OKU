@@ -350,7 +350,11 @@ class Recommendation(Base):
     test_id: Mapped[int] = mapped_column(ForeignKey("tests.id", ondelete="CASCADE"), unique=True)
     weak_topics_json: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     advice_text: Mapped[str] = mapped_column(Text, nullable=False)
+    advice_text_ru: Mapped[str | None] = mapped_column(Text, nullable=True)
+    advice_text_kz: Mapped[str | None] = mapped_column(Text, nullable=True)
     generated_tasks_json: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
+    generated_tasks_ru_json: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    generated_tasks_kz_json: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     test: Mapped[Test] = relationship(back_populates="recommendation")

@@ -11,6 +11,19 @@ from app.schemas.teacher import GroupAnalyticsResponse, GroupStudentMetric, Grou
 from app.schemas.tests import HistoryItemResponse, ProgressPoint, StudentProgressResponse, SubjectStat
 
 
+def _localized_subject_pair_for_history(*, subject: Subject, session: TestSession | None) -> tuple[str, str]:
+    exam_kind = str(session.exam_kind).strip().lower() if session and session.exam_kind else None
+    if exam_kind == "ent":
+        return "ЕНТ", "ҰБТ"
+    if exam_kind == "ielts":
+        return "IELTS", "IELTS"
+    if exam_kind == "group_custom":
+        configured_title = str((session.exam_config_json or {}).get("title", "")).strip() if session else ""
+        if configured_title:
+            return configured_title, configured_title
+    return subject.name_ru, subject.name_kz
+
+
 def build_student_history(db: Session, student_id: int) -> list[HistoryItemResponse]:
     rows = db.execute(
         select(Test, Subject, Result, Recommendation, TestSession)
@@ -25,21 +38,16 @@ def build_student_history(db: Session, student_id: int) -> list[HistoryItemRespo
     history: list[HistoryItemResponse] = []
     for test, subject, result, recommendation, session in rows:
         exam_kind = str(session.exam_kind).strip().lower() if session and session.exam_kind else None
-        if exam_kind == "ent":
-            subject_name = "ЕНТ"
-        elif exam_kind == "ielts":
-            subject_name = "IELTS"
-        elif exam_kind == "group_custom":
-            configured_title = str((session.exam_config_json or {}).get("title", "")).strip() if session else ""
-            subject_name = configured_title or (subject.name_ru if test.language.value == "RU" else subject.name_kz)
-        else:
-            subject_name = subject.name_ru if test.language.value == "RU" else subject.name_kz
+        subject_name_ru, subject_name_kz = _localized_subject_pair_for_history(subject=subject, session=session)
+        subject_name = subject_name_ru if test.language.value == "RU" else subject_name_kz
 
         history.append(
             HistoryItemResponse(
                 test_id=test.id,
                 subject_id=subject.id,
                 subject_name=subject_name,
+                subject_name_ru=subject_name_ru,
+                subject_name_kz=subject_name_kz,
                 exam_kind=exam_kind,
                 difficulty=test.difficulty,
                 language=test.language,
@@ -78,19 +86,21 @@ def build_student_progress(db: Session, student_id: int) -> StudentProgressRespo
     total_warnings = 0
     trend: list[ProgressPoint] = []
     subject_buckets: defaultdict[int, list[float]] = defaultdict(list)
-    subject_names: dict[int, str] = {}
+    subject_names: dict[int, tuple[str, str]] = {}
 
     for test, subject, result, session in rows:
         percents.append(result.percent)
         total_warnings += int(session.warning_count if session else 0)
         trend.append(ProgressPoint(date=test.created_at.date().isoformat(), percent=round(result.percent, 2)))
         subject_buckets[subject.id].append(result.percent)
-        subject_names[subject.id] = subject.name_ru if test.language.value == "RU" else subject.name_kz
+        subject_names[subject.id] = (subject.name_ru, subject.name_kz)
 
     subject_stats = [
         SubjectStat(
             subject_id=subject_id,
-            subject_name=subject_names[subject_id],
+            subject_name=subject_names[subject_id][0],
+            subject_name_ru=subject_names[subject_id][0],
+            subject_name_kz=subject_names[subject_id][1],
             tests_count=len(values),
             avg_percent=round(sum(values) / len(values), 2),
         )

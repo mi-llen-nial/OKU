@@ -65,7 +65,7 @@ export default function HistoryPage() {
     if (history.length === 0) return t("Нет данных", "Дерек жоқ");
     const counter = new Map<string, number>();
     for (const item of history) {
-      const title = attemptTitle(item);
+      const title = attemptTitle(item, uiLanguage);
       counter.set(title, (counter.get(title) || 0) + 1);
     }
     return [...counter.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] || t("Нет данных", "Дерек жоқ");
@@ -167,7 +167,7 @@ export default function HistoryPage() {
               <article className={styles.metricItem}>
                 <h3 className={styles.metricLabel}>{t("Лучший результат", "Ең үздік нәтиже")}</h3>
                 <p className={styles.metricMeta}>
-                  {bestAttempt ? `${attemptTitle(bestAttempt)} (${difficultyLabel(bestAttempt.difficulty, uiLanguage)})` : t("Пока нет данных", "Әзірге дерек жоқ")}
+                  {bestAttempt ? `${attemptTitle(bestAttempt, uiLanguage)} (${difficultyLabel(bestAttempt.difficulty, uiLanguage)})` : t("Пока нет данных", "Әзірге дерек жоқ")}
                 </p>
                 <p className={styles.metricValue}>{formatPercent(progress?.best_percent ?? 0)}</p>
               </article>
@@ -187,7 +187,7 @@ export default function HistoryPage() {
               <article className={styles.metricItem}>
                 <h3 className={styles.metricLabel}>{t("Худший результат", "Ең төмен нәтиже")}</h3>
                 <p className={styles.metricMeta}>
-                  {worstAttempt ? `${attemptTitle(worstAttempt)} (${difficultyLabel(worstAttempt.difficulty, uiLanguage)})` : t("Пока нет данных", "Әзірге дерек жоқ")}
+                  {worstAttempt ? `${attemptTitle(worstAttempt, uiLanguage)} (${difficultyLabel(worstAttempt.difficulty, uiLanguage)})` : t("Пока нет данных", "Әзірге дерек жоқ")}
                 </p>
                 <p className={styles.metricValue}>{worstAttempt ? formatPercent(worstAttempt.percent) : "–"}</p>
               </article>
@@ -218,7 +218,7 @@ export default function HistoryPage() {
                 <div className={styles.attemptList}>
                   {visibleHistory.map((item) => {
                     const scoreClass = resolveScoreClass(item.percent);
-                    const title = attemptTitle(item);
+                    const title = attemptTitle(item, uiLanguage);
 
                     return (
                       <article className={styles.attemptCard} key={item.test_id}>
@@ -311,7 +311,7 @@ function normalizeText(value: string): string {
 function resolveSubjectIcon(subjectName: string): string {
   const key = normalizeText(subjectName);
   if (key.includes("ielts")) return assetPaths.icons.ielts;
-  if (key.includes("ент") || key.includes("ent")) return assetPaths.icons.ent;
+  if (key.includes("ент") || key.includes("ұбт") || key.includes("ent") || key.includes("ubt")) return assetPaths.icons.ent;
   if (key.includes("алгебр")) return assetPaths.icons.algebra;
   if (key.includes("геометр")) return assetPaths.icons.geometry;
   if (key.includes("физик")) return assetPaths.icons.physics;
@@ -331,10 +331,16 @@ function difficultyLabel(value: HistoryItem["difficulty"], language: "RU" | "KZ"
   return tr(language, "Средний", "Орташа");
 }
 
-function attemptTitle(item: Pick<HistoryItem, "subject_name" | "exam_kind">): string {
+function attemptTitle(
+  item: Pick<HistoryItem, "subject_name" | "subject_name_ru" | "subject_name_kz" | "exam_kind">,
+  language: "RU" | "KZ",
+): string {
   if (item.exam_kind === "ielts") return "IELTS";
-  if (item.exam_kind === "ent") return "ЕНТ";
-  return item.subject_name;
+  if (item.exam_kind === "ent") return tr(language, "ЕНТ", "ҰБТ");
+  if (language === "KZ") {
+    return item.subject_name_kz || item.subject_name_ru || item.subject_name;
+  }
+  return item.subject_name_ru || item.subject_name_kz || item.subject_name;
 }
 
 function modeLabel(value: HistoryItem["mode"], language: "RU" | "KZ"): string {

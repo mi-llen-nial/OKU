@@ -52,6 +52,7 @@ from app.schemas.teacher_tests import (
 )
 from app.schemas.tests import HistoryItemResponse, StudentProgressResponse
 from app.services.cache import cache
+from app.services.custom_tests import custom_test_duration_minutes
 from app.services.progress import (
     build_group_analytics,
     build_group_weak_topics,
@@ -917,7 +918,7 @@ def _serialize_custom_test(*, db: DBSession, custom_test_id: int, teacher_id: in
     return TeacherCustomTestResponse(
         id=custom_test.id,
         title=custom_test.title,
-        duration_minutes=max(1, custom_test.time_limit_seconds // 60),
+        duration_minutes=custom_test_duration_minutes(custom_test.time_limit_seconds),
         warning_limit=custom_test.warning_limit,
         due_date=custom_test.due_date,
         questions_count=len(custom_test.questions),
@@ -942,7 +943,7 @@ def _serialize_custom_test_list_item(custom_test: TeacherAuthoredTest) -> Teache
     return TeacherCustomTestListItem(
         id=custom_test.id,
         title=custom_test.title,
-        duration_minutes=max(1, custom_test.time_limit_seconds // 60),
+        duration_minutes=custom_test_duration_minutes(custom_test.time_limit_seconds),
         warning_limit=custom_test.warning_limit,
         due_date=custom_test.due_date,
         questions_count=len(custom_test.questions),
