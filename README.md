@@ -234,6 +234,24 @@ make import-catalog-csv CSV="/Users/mellennial/Downloads/База вопросо
 - обновляет дубликаты по `content_hash`,
 - сразу публикует валидные записи в `catalog_questions` (по умолчанию).
 
+### Авто-импорт CSV при старте backend (Render/Prod)
+Чтобы не запускать `make import-catalog-local` вручную, backend теперь может сам подтягивать
+`database_question.csv` на старте.
+
+ENV-параметры:
+```bash
+CATALOG_AUTO_IMPORT_CSV_ON_STARTUP=true
+CATALOG_AUTO_IMPORT_CSV_PATH=app/db/database_question.csv
+CATALOG_AUTO_IMPORT_CSV_SOURCE=csv_question_bank
+CATALOG_AUTO_IMPORT_CSV_PUBLISH=true
+CATALOG_AUTO_IMPORT_CSV_FAIL_FAST=false
+```
+
+Как это работает:
+- на старте backend считает hash CSV,
+- если этот hash уже импортирован в БД, повторный импорт пропускается,
+- если CSV изменился, выполняется upsert и публикация.
+
 ### Добавление нового вопроса в CSV (через скрипт)
 Добавляйте новые строки в `backend/app/db/database_question.csv` через:
 ```bash

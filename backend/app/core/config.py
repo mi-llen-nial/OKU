@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     seed_demo_data: bool = True
     teacher_max_groups: int = 3
     group_max_members: int = 30
+    catalog_auto_import_csv_on_startup: bool = True
+    catalog_auto_import_csv_path: str = "app/db/database_question.csv"
+    catalog_auto_import_csv_source: str = "csv_question_bank"
+    catalog_auto_import_csv_publish: bool = True
+    catalog_auto_import_csv_fail_fast: bool = False
 
     email_verification_enabled: bool = True
     email_verification_code_ttl_minutes: int = 10

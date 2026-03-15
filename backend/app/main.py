@@ -1,7 +1,11 @@
 import logging
+from hashlib import sha256
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.api.auth import router as auth_router
 from app.api.catalog import router as catalog_router
@@ -17,7 +21,9 @@ from app.core.logging_config import configure_logging
 from app.core.rate_limit import RateLimitMiddleware
 from app.db.init_db import assert_database_ready, seed_demo_data_if_enabled
 from app.db.session import engine
+from app.models import CatalogQuestion
 from app.services.cache import cache
+from app.services.question_catalog import question_catalog_service
 from app.services.tts import tts_service
 
 logger = logging.getLogger(__name__)
@@ -45,6 +51,7 @@ def startup_event() -> None:
     _validate_security_settings()
     assert_database_ready()
     seed_demo_data_if_enabled()
+    _sync_catalog_csv_on_startup()
 
     logger.info("Redis cache enabled: %s", cache.ping())
     logger.info("TTS provider: %s", type(tts_service._provider).__name__)
@@ -72,6 +79,58 @@ def _validate_security_settings() -> None:
     if settings.app_env.lower() == "production":
         raise RuntimeError("JWT_SECRET_KEY must be set and at least 32 characters in production.")
     logger.warning("JWT_SECRET_KEY is weak or missing. Set a 32+ chars key before production deploy.")
+
+
+def _resolve_catalog_csv_path() -> Path:
+    raw_path = str(settings.catalog_auto_import_csv_path or "").strip()
+    if not raw_path:
+        return Path("")
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+    backend_root = Path(__file__).resolve().parents[1]
+    return (backend_root / path).resolve()
+
+
+def _sync_catalog_csv_on_startup() -> None:
+    if not settings.catalog_auto_import_csv_on_startup:
+        return
+
+    csv_path = _resolve_catalog_csv_path()
+    if not csv_path.exists() or not csv_path.is_file():
+        message = f"Catalog CSV auto-import skipped: file not found ({csv_path})."
+        if settings.catalog_auto_import_csv_fail_fast:
+            raise RuntimeError(message)
+        logger.warning(message)
+        return
+
+    try:
+        digest = sha256(csv_path.read_bytes()).hexdigest()[:16]
+        source_label = f"{settings.catalog_auto_import_csv_source}:{digest}"
+        with Session(engine) as db:
+            existing = db.scalar(select(CatalogQuestion.id).where(CatalogQuestion.source == source_label).limit(1))
+            if existing is not None:
+                logger.info("Catalog CSV auto-import skipped: hash already applied (%s).", digest)
+                return
+
+            stats = question_catalog_service.import_from_csv_file(
+                db=db,
+                csv_path=str(csv_path),
+                source=source_label,
+                publish=settings.catalog_auto_import_csv_publish,
+            )
+            logger.info(
+                "Catalog CSV auto-import completed: imported=%s updated=%s skipped=%s invalid=%s hash=%s",
+                stats.imported,
+                stats.updated,
+                stats.skipped,
+                stats.invalid,
+                digest,
+            )
+    except Exception as exc:  # noqa: BLE001
+        if settings.catalog_auto_import_csv_fail_fast:
+            raise RuntimeError(f"Catalog CSV auto-import failed: {exc}") from exc
+        logger.exception("Catalog CSV auto-import failed: %s", exc)
 
 
 def _init_sentry() -> None:
