@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -26,6 +27,13 @@ class TeacherMaterialResult:
     rejected_count: int
 
 
+@dataclass(frozen=True)
+class LLMRequestProfile:
+    temperature: float
+    timeout_seconds: int
+    max_tokens: int
+
+
 class TeacherMaterialService:
     def generate_and_validate(
         self,
@@ -48,13 +56,14 @@ class TeacherMaterialService:
         last_provider_error: str | None = None
         successful_batches = 0
 
-        max_calls = 6
+        max_calls = 8 if difficulty == DifficultyLevel.hard else 6
         for attempt in range(1, max_calls + 1):
             remaining = max(0, requested - len(accepted))
             if remaining <= 0:
                 break
             # Ask for a slightly bigger batch than remaining so validation can reject low-quality items.
-            oversample = max(2, round(remaining * 0.4))
+            oversample_ratio = 0.6 if difficulty == DifficultyLevel.hard else 0.4
+            oversample = max(3 if difficulty == DifficultyLevel.hard else 2, round(remaining * oversample_ratio))
             batch_size = min(16, remaining + oversample)
             try:
                 llm_items = self._generate_raw_with_llm(
@@ -91,10 +100,16 @@ class TeacherMaterialService:
             if len(accepted) == before_count:
                 last_quality_error = "LLM returned batch without valid questions."
             if len(accepted) >= requested:
-                return TeacherMaterialResult(questions=accepted[:requested], rejected_count=rejected)
+                return TeacherMaterialResult(
+                    questions=self._postprocess_questions(accepted[:requested], difficulty=difficulty),
+                    rejected_count=rejected,
+                )
 
         if accepted:
-            return TeacherMaterialResult(questions=accepted[:requested], rejected_count=rejected)
+            return TeacherMaterialResult(
+                questions=self._postprocess_questions(accepted[:requested], difficulty=difficulty),
+                rejected_count=rejected,
+            )
 
         if successful_batches == 0:
             details = last_provider_error or "LLM provider returned no successful response."
@@ -121,14 +136,22 @@ class TeacherMaterialService:
             language=language,
             batch_size=questions_count,
         )
+        difficulty_rubric = self._difficulty_rubric(difficulty=difficulty)
+        option_requirement = (
+            "Если answer_type=choice: в КАЖДОМ вопросе строго 6 или 8 вариантов ответа."
+            if difficulty == DifficultyLevel.hard
+            else "Если answer_type=choice: в КАЖДОМ вопросе минимум 4 варианта ответа."
+        )
         system_prompt = (
             "Ты помощник преподавателя. Сгенерируй валидный набор вопросов для теста. "
             "Отвечай строго JSON-объектом без markdown и комментариев. "
             'Формат: {"questions":[{"answer_type":"choice|free_text","prompt":"...","options":[...],'
             '"correct_option_index":0,"sample_answer":"...","topic":"...","explanation":"..."}]}. '
-            "Для answer_type=choice: минимум 4 варианта, ровно один правильный индекс. "
+            f"{option_requirement} "
+            "Для answer_type=choice: ровно один правильный индекс. "
             "Для answer_type=free_text: options пустой массив, sample_answer обязателен. "
-            "Запрещены пустые или шаблонные формулировки."
+            "Запрещены пустые или шаблонные формулировки. "
+            "Сложность соблюдай строго согласно рубрике."
         )
         user_prompt = (
             f"Тема: {topic}\n"
@@ -139,6 +162,7 @@ class TeacherMaterialService:
             f"Попытка: {attempt}\n"
             f"User id: {user_id}\n"
             "Требования:\n"
+            f"0) Рубрика сложности:\n{difficulty_rubric}\n"
             "1) Вопросы должны быть строго по теме.\n"
             "2) Без дублей формулировок.\n"
             "3) Никаких placeholders.\n"
@@ -147,14 +171,20 @@ class TeacherMaterialService:
             "6) Если тема короткая (одно слово), раскрой ее через разные подтемы.\n"
             "7) Держи баланс типов вопросов по плану ниже.\n"
             f"{blueprint}\n"
-            "8) Приоритет answer_type=choice. free_text допускается, но не более 30% в пачке."
+            "8) Приоритет answer_type=choice. free_text допускается, но не более 30% в пачке.\n"
+            "9) Для choice распределяй correct_option_index равномерно по индексам 0,1,2,3 в пределах пачки."
+        )
+        profile = self._build_llm_request_profile(
+            difficulty=difficulty,
+            batch_size=questions_count,
+            attempt=attempt,
         )
         raw = llm_chat(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            temperature=0.2,
-            timeout_seconds=max(15, min(50, int(settings.openai_timeout_seconds))),
-            max_tokens=max(900, min(5000, questions_count * 260)),
+            temperature=profile.temperature,
+            timeout_seconds=profile.timeout_seconds,
+            max_tokens=profile.max_tokens,
             audience="teacher",
         )
         payload = self._extract_json(raw)
@@ -198,7 +228,11 @@ class TeacherMaterialService:
         rejected = int(rejected_prefix)
 
         for raw in raw_items:
-            converted = self._normalize_raw_question(raw, topic_fallback=topic)
+            converted = self._normalize_raw_question(
+                raw,
+                topic_fallback=topic,
+                difficulty=difficulty,
+            )
             if not converted:
                 rejected += 1
                 continue
@@ -246,6 +280,7 @@ class TeacherMaterialService:
         raw: dict[str, Any],
         *,
         topic_fallback: str,
+        difficulty: DifficultyLevel,
     ) -> dict[str, Any] | None:
         prompt = str(raw.get("prompt", "")).strip()
         if not prompt:
@@ -268,7 +303,8 @@ class TeacherMaterialService:
             }
 
         options = [str(option).strip() for option in (raw.get("options") or []) if str(option).strip()]
-        if len(options) < 2:
+        min_options = 6 if difficulty == DifficultyLevel.hard else 4
+        if len(options) < min_options:
             return None
         raw_correct_index = raw.get("correct_option_index")
         try:
@@ -277,6 +313,34 @@ class TeacherMaterialService:
             correct_index = None
         if correct_index is None or correct_index < 0 or correct_index >= len(options):
             return None
+
+        if difficulty == DifficultyLevel.hard:
+            # Enforce 6/8 options for hard difficulty while preserving the correct option.
+            if len(options) >= 8:
+                if len(options) > 8:
+                    keep = list(range(8))
+                    if correct_index not in keep:
+                        keep[-1] = correct_index
+                    keep = sorted(set(keep))
+                    options = [options[idx] for idx in keep]
+                    correct_index = keep.index(correct_index)
+                else:
+                    options = options[:8]
+            elif len(options) == 7:
+                # Convert 7->6 by removing a distractor, not the correct option.
+                remove_idx = 6 if correct_index != 6 else 5
+                options = [item for idx, item in enumerate(options) if idx != remove_idx]
+                if correct_index > remove_idx:
+                    correct_index -= 1
+            elif len(options) == 6:
+                pass
+            else:
+                return None
+            if len(options) not in {6, 8}:
+                return None
+        else:
+            options = options[:8]
+
         return {
             "type": "single_choice",
             "prompt": prompt,
@@ -285,6 +349,81 @@ class TeacherMaterialService:
             "topic_tags": topic_tags,
             "explanation": str(raw.get("explanation") or prompt).strip(),
         }
+
+    def _postprocess_questions(
+        self,
+        questions: list[TeacherCustomMaterialQuestion],
+        *,
+        difficulty: DifficultyLevel,
+    ) -> list[TeacherCustomMaterialQuestion]:
+        if not questions:
+            return []
+
+        output = [item.model_copy(deep=True) for item in questions]
+        choice_indexes = [
+            idx
+            for idx, question in enumerate(output)
+            if question.answer_type == "choice"
+            and isinstance(question.correct_option_index, int)
+            and question.correct_option_index is not None
+            and question.options
+        ]
+        if not choice_indexes:
+            return output
+
+        rng = random.SystemRandom()
+        target_positions = self._build_balanced_correct_positions(len(choice_indexes), rng=rng)
+        for order_idx, question_idx in enumerate(choice_indexes):
+            question = output[question_idx]
+            options = [str(item).strip() for item in (question.options or []) if str(item).strip()]
+            if not options:
+                continue
+            correct_index = int(question.correct_option_index or 0)
+            if correct_index < 0 or correct_index >= len(options):
+                continue
+
+            if difficulty == DifficultyLevel.hard:
+                if len(options) > 8:
+                    options = options[:8]
+                if len(options) not in {6, 8}:
+                    continue
+            else:
+                if len(options) < 4:
+                    continue
+
+            target = target_positions[order_idx]
+            if target >= len(options):
+                target = len(options) - 1
+
+            options[target], options[correct_index] = options[correct_index], options[target]
+            current_correct = target
+
+            distractor_indexes = [idx for idx in range(len(options)) if idx != current_correct]
+            distractors = [options[idx] for idx in distractor_indexes]
+            rng.shuffle(distractors)
+            for idx, value in zip(distractor_indexes, distractors):
+                options[idx] = value
+
+            question.options = options
+            question.correct_option_index = current_correct
+
+        return output
+
+    def _build_balanced_correct_positions(
+        self,
+        count: int,
+        *,
+        rng: random.SystemRandom,
+    ) -> list[int]:
+        if count <= 0:
+            return []
+        base = [0, 1, 2, 3]
+        positions: list[int] = []
+        while len(positions) < count:
+            chunk = base[:]
+            rng.shuffle(chunk)
+            positions.extend(chunk)
+        return positions[:count]
 
     def _to_schema_item(self, normalized_payload: dict[str, Any]) -> TeacherCustomMaterialQuestion | None:
         question_type = str(normalized_payload.get("type", "single_choice"))
@@ -399,6 +538,69 @@ class TeacherMaterialService:
             ("задачи повышенной сложности", 0.26),
             ("ошибки и контрпримеры", 0.22),
         ]
+
+    def _difficulty_rubric(self, *, difficulty: DifficultyLevel) -> str:
+        if difficulty == DifficultyLevel.easy:
+            return (
+                "- Уровень сложности: школьная программа СНГ, 6-8 классы.\n"
+                "- 70% вопросов: термины, базовые свойства, распознавание понятий.\n"
+                "- 30% вопросов: простое применение правил и одношаговые вычисления.\n"
+                "- Формулировки короткие, без сложных многоэтапных рассуждений."
+            )
+        if difficulty == DifficultyLevel.medium:
+            return (
+                "- Уровень сложности: школьная программа СНГ, 9-11 классы.\n"
+                "- 50% вопросов: теория, взаимосвязи понятий, формулы.\n"
+                "- 50% вопросов: типовые задачи в 1-2 шага и выбор корректного метода.\n"
+                "- Требуются уверенные школьные знания, без олимпиадной перегрузки."
+            )
+        return (
+            "- Уровень сложности: ЕГЭ (профильный уровень).\n"
+            "- 40% вопросов: продвинутая теория, тонкие различия, типичные ловушки.\n"
+            "- 60% вопросов: задачи повышенной сложности в 2-3 шага и интерпретация условий.\n"
+            "- Для answer_type=choice в каждом вопросе строго 6 или 8 вариантов."
+        )
+
+    def _build_llm_request_profile(
+        self,
+        *,
+        difficulty: DifficultyLevel,
+        batch_size: int,
+        attempt: int,
+    ) -> LLMRequestProfile:
+        base_timeout = int(settings.openai_timeout_seconds or 45)
+        safe_timeout = max(20, base_timeout)
+        safe_batch = max(1, int(batch_size))
+        normalized_attempt = max(1, int(attempt))
+
+        if difficulty == DifficultyLevel.hard:
+            timeout = min(120, safe_timeout + 35 + ((normalized_attempt - 1) * 5))
+            max_tokens = min(9000, max(1800, safe_batch * 520))
+            temperature = 0.14 if normalized_attempt == 1 else 0.10
+            return LLMRequestProfile(
+                temperature=temperature,
+                timeout_seconds=timeout,
+                max_tokens=max_tokens,
+            )
+
+        if difficulty == DifficultyLevel.medium:
+            timeout = min(90, safe_timeout + 10 + ((normalized_attempt - 1) * 3))
+            max_tokens = min(7000, max(1100, safe_batch * 340))
+            temperature = 0.18 if normalized_attempt == 1 else 0.15
+            return LLMRequestProfile(
+                temperature=temperature,
+                timeout_seconds=timeout,
+                max_tokens=max_tokens,
+            )
+
+        timeout = min(75, safe_timeout + 5 + ((normalized_attempt - 1) * 2))
+        max_tokens = min(5200, max(900, safe_batch * 250))
+        temperature = 0.2 if normalized_attempt == 1 else 0.16
+        return LLMRequestProfile(
+            temperature=temperature,
+            timeout_seconds=timeout,
+            max_tokens=max_tokens,
+        )
 
 
 def _prompt_key(prompt: str) -> str:
