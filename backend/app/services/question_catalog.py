@@ -30,6 +30,14 @@ class CatalogImportStats:
     invalid: int = 0
 
 
+@dataclass
+class CatalogRevalidateStats:
+    scanned: int = 0
+    normalized: int = 0
+    archived_invalid: int = 0
+    invalid: int = 0
+
+
 class QuestionCatalogService:
     @staticmethod
     def _row_to_validation_payload(row: CatalogQuestion) -> dict[str, Any]:
@@ -502,6 +510,83 @@ class QuestionCatalogService:
         if int(count or 0) > 0:
             return
         self.import_from_question_bank(db=db, subject_id=subject.id)
+
+    def revalidate_published_questions(
+        self,
+        *,
+        db: Session,
+        source_prefix: str | None = None,
+        archive_invalid: bool = True,
+        normalize_valid: bool = True,
+    ) -> CatalogRevalidateStats:
+        stats = CatalogRevalidateStats()
+        query = select(CatalogQuestion).where(
+            CatalogQuestion.status == CatalogQuestionStatus.published,
+        )
+        prefix = str(source_prefix or "").strip()
+        if prefix:
+            query = query.where(
+                (CatalogQuestion.source == prefix)
+                | (CatalogQuestion.source.like(f"{prefix}:%"))
+            )
+        rows = db.scalars(query).all()
+        for row in rows:
+            stats.scanned += 1
+            validation = validate_question_payload(
+                payload=self._row_to_validation_payload(row),
+                language=row.language,
+                mode=row.mode,
+                difficulty=row.difficulty,
+            )
+            if not validation.is_valid:
+                stats.invalid += 1
+                if archive_invalid:
+                    row.status = CatalogQuestionStatus.archived
+                    row.published_at = None
+                    stats.archived_invalid += 1
+                continue
+
+            if not normalize_valid:
+                continue
+
+            normalized = validation.payload
+            changed = False
+
+            prompt = str(normalized.get("prompt") or "")
+            options_json = normalized.get("options_json")
+            correct_answer_json = normalized.get("correct_answer_json")
+            explanation_json = normalized.get("explanation_json")
+            topic_tags = list(normalized.get("topic_tags") or [])
+            correct_options_count = int(normalized.get("correct_options_count") or 0)
+            content_hash = str(normalized.get("content_hash") or "")
+
+            if row.prompt != prompt:
+                row.prompt = prompt
+                changed = True
+            if row.options_json != options_json:
+                row.options_json = options_json
+                changed = True
+            if row.correct_answer_json != correct_answer_json:
+                row.correct_answer_json = correct_answer_json
+                changed = True
+            if row.explanation_json != explanation_json:
+                row.explanation_json = explanation_json
+                changed = True
+            if list(row.topic_tags_json or []) != topic_tags:
+                row.topic_tags_json = topic_tags
+                changed = True
+            if int(row.correct_options_count or 0) != correct_options_count:
+                row.correct_options_count = correct_options_count
+                changed = True
+            if str(row.content_hash or "") != content_hash:
+                row.content_hash = content_hash
+                changed = True
+
+            if changed:
+                stats.normalized += 1
+
+        db.commit()
+        return stats
 
     def get_published_candidates(
         self,

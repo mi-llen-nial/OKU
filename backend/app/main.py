@@ -112,6 +112,20 @@ def _sync_catalog_csv_on_startup() -> None:
             existing = db.scalar(select(CatalogQuestion.id).where(CatalogQuestion.source == source_label).limit(1))
             if existing is not None:
                 logger.info("Catalog CSV auto-import skipped: hash already applied (%s).", digest)
+                revalidate_stats = question_catalog_service.revalidate_published_questions(
+                    db=db,
+                    source_prefix=None,
+                    archive_invalid=True,
+                    normalize_valid=True,
+                )
+                if revalidate_stats.archived_invalid or revalidate_stats.normalized:
+                    logger.warning(
+                        "Catalog revalidation fixed rows (hash-skip path): scanned=%s normalized=%s archived_invalid=%s invalid=%s",
+                        revalidate_stats.scanned,
+                        revalidate_stats.normalized,
+                        revalidate_stats.archived_invalid,
+                        revalidate_stats.invalid,
+                    )
                 return
 
             stats = question_catalog_service.import_from_csv_file(
@@ -133,6 +147,26 @@ def _sync_catalog_csv_on_startup() -> None:
                 stats.invalid,
                 digest,
             )
+
+            revalidate_stats = question_catalog_service.revalidate_published_questions(
+                db=db,
+                source_prefix=None,
+                archive_invalid=True,
+                normalize_valid=True,
+            )
+            if revalidate_stats.archived_invalid or revalidate_stats.normalized:
+                logger.warning(
+                    "Catalog revalidation fixed rows: scanned=%s normalized=%s archived_invalid=%s invalid=%s",
+                    revalidate_stats.scanned,
+                    revalidate_stats.normalized,
+                    revalidate_stats.archived_invalid,
+                    revalidate_stats.invalid,
+                )
+            else:
+                logger.info(
+                    "Catalog revalidation completed: scanned=%s, no corrections needed.",
+                    revalidate_stats.scanned,
+                )
     except Exception as exc:  # noqa: BLE001
         if settings.catalog_auto_import_csv_fail_fast:
             raise RuntimeError(f"Catalog CSV auto-import failed: {exc}") from exc
