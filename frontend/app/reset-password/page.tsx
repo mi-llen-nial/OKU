@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { confirmPasswordReset } from "@/lib/api";
@@ -13,6 +14,14 @@ import { assetPaths } from "@/src/assets";
 import styles from "@/app/auth.module.css";
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordPageInner />
+    </Suspense>
+  );
+}
+
+function ResetPasswordPageInner() {
   const uiLanguage = useUiLanguage();
   const t = (ru: string, kz: string) => tr(uiLanguage, ru, kz);
   const searchParams = useSearchParams();
