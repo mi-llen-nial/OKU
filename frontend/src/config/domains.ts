@@ -68,8 +68,13 @@ export function isAppHostname(host: string): boolean {
     return true;
   }
 
-  if (siteHostingMode === "app") return true;
-  if (siteHostingMode === "public") return false;
+  // `NEXT_PUBLIC_SITE_HOSTING` is intended mostly for local testing.
+  // In production, forcing `public` can create redirect loops on app subdomain.
+  const isLocal = isLocalHostName(h);
+  if (isLocal) {
+    if (siteHostingMode === "app") return true;
+    if (siteHostingMode === "public") return false;
+  }
 
   if (!h) return true;
 

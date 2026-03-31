@@ -29,6 +29,16 @@ function buildOrigin(proto: string, host: string): string {
   return `${proto}://${host}`;
 }
 
+function isSameDestination(request: NextRequest, target: URL): boolean {
+  const current = request.nextUrl;
+  return (
+    current.protocol === target.protocol &&
+    current.host === target.host &&
+    current.pathname === target.pathname &&
+    current.search === target.search
+  );
+}
+
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const search = request.nextUrl.search;
@@ -54,12 +64,18 @@ export function middleware(request: NextRequest) {
   if (!onApp && isPlatformPath(pathname)) {
     const targetBase = appOrigin || buildOrigin(proto, appHostname);
     const url = new URL(pathname + search, targetBase);
+    if (isSameDestination(request, url)) {
+      return NextResponse.next();
+    }
     return NextResponse.redirect(url);
   }
 
   if (onApp && isPublicMarketingPath(pathname) && !isLocalDevHost(host)) {
     const pub = publicSiteOrigin;
     const url = new URL(pathname + search, pub);
+    if (isSameDestination(request, url)) {
+      return NextResponse.next();
+    }
     return NextResponse.redirect(url);
   }
 
