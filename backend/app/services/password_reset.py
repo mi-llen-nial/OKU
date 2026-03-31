@@ -134,7 +134,7 @@ class PasswordResetService:
         return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
 
     def _build_reset_url(self, token_raw: str) -> str:
-        base = settings.frontend_app_url.strip() or "http://localhost:3000"
+        base = settings.frontend_app_url.strip() or "https://app.oku.com.kz"
         # /reset-password?token=...
         return f"{base.rstrip('/')}/reset-password?token={token_raw}"
 

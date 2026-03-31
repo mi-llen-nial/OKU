@@ -136,7 +136,10 @@ class Settings(BaseSettings):
     # Password reset (Resend email + one-time token)
     password_reset_token_ttl_minutes: int = 30
     password_reset_request_resend_cooldown_seconds: int = 60
-    frontend_app_url: str = Field(default="", validation_alias=AliasChoices("NEXT_PUBLIC_APP_URL", "FRONTEND_APP_URL"))
+    frontend_app_url: str = Field(
+        default="https://app.oku.com.kz",
+        validation_alias=AliasChoices("NEXT_PUBLIC_APP_URL", "FRONTEND_APP_URL"),
+    )
 
     @property
     def cors_origins_list(self) -> list[str]:

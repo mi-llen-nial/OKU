@@ -8,11 +8,21 @@ const DEFAULT_APP_ORIGIN = "https://app.oku.com.kz";
 const DEFAULT_PUBLIC_HOSTNAME = "oku.com.kz";
 const DEFAULT_APP_HOSTNAME = "app.oku.com.kz";
 
+function isLocalHostName(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
+}
+
 function normalizeOrigin(raw: string | undefined, fallback: string): string {
   const value = (raw || "").trim();
   if (!value) return fallback;
   try {
     const parsed = new URL(value);
+    // Safety for prod builds: if misconfigured env points to localhost,
+    // keep canonical production fallback instead of leaking localhost links.
+    if (isLocalHostName(parsed.hostname) && process.env.NODE_ENV === "production") {
+      return fallback;
+    }
     const protocol = parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.protocol : "https:";
     return `${protocol}//${parsed.host}`;
   } catch {
@@ -46,8 +56,7 @@ function hostnameOnly(host: string): string {
 
 /** localhost / 127.0.0.1 — лендинг на `/`, без «корня платформы» как на app.* */
 export function isLocalDevHostname(host: string): boolean {
-  const h = hostnameOnly(host);
-  return h === "localhost" || h === "127.0.0.1";
+  return isLocalHostName(hostnameOnly(host));
 }
 
 /**

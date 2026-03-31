@@ -537,6 +537,10 @@ function resolveApiUrl(): string {
     return inferredApiUrl;
   }
 
+  if (process.env.NODE_ENV === "production") {
+    return "https://api.oku.com.kz";
+  }
+
   return "http://localhost:8000";
 }
 
