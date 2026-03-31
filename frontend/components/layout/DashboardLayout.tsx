@@ -21,6 +21,7 @@ import { ReactNode, useEffect, useMemo, useState } from "react";
 import Button from "@/components/ui/Button";
 import SidebarItem from "@/components/ui/SidebarItem";
 import { clearSession, getUser } from "@/lib/auth";
+import { publicPath } from "@/src/config/domains";
 import { Language } from "@/lib/types";
 import { tr, UI_LANG_STORAGE_KEY, setUiLanguage as setLanguagePreference, useUiLanguage } from "@/lib/i18n";
 import { assetPaths } from "@/src/assets";
@@ -57,8 +58,15 @@ function getPageTitle(pathname: string, role: string | undefined, language: Lang
   if (pathname.startsWith("/teacher/create-test")) return tr(language, "Создать тест", "Тест құру");
   if (pathname.startsWith("/teacher/tests")) return tr(language, "Мои тесты", "Менің тесттерім");
   if (pathname === "/teacher") return tr(language, "Группы", "Топтар");
+  if (pathname.startsWith("/institution-admin")) return tr(language, "Учреждение", "Оқу орны");
+  if (pathname.startsWith("/methodist")) return tr(language, "Модерация тестов", "Тест модерациясы");
+  if (pathname.startsWith("/superadmin")) return tr(language, "Платформа", "Платформа");
   if (pathname.startsWith("/profile")) return tr(language, "Профиль", "Профиль");
-  return role === "teacher" ? tr(language, "Группы", "Топтар") : "OKU";
+  if (role === "teacher") return tr(language, "Группы", "Топтар");
+  if (role === "institution_admin") return tr(language, "Учреждение", "Оқу орны");
+  if (role === "methodist") return tr(language, "Модерация тестов", "Тест модерациясы");
+  if (role === "superadmin") return tr(language, "Платформа", "Платформа");
+  return "OKU";
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -155,6 +163,33 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         },
       ];
     }
+    if (user?.role === "institution_admin") {
+      return [
+        {
+          href: "/institution-admin",
+          label: t("Учреждение", "Оқу орны"),
+          icon: <Users size={18} />,
+        },
+      ];
+    }
+    if (user?.role === "methodist") {
+      return [
+        {
+          href: "/methodist",
+          label: t("Модерация", "Модерация"),
+          icon: <ListChecks size={18} />,
+        },
+      ];
+    }
+    if (user?.role === "superadmin") {
+      return [
+        {
+          href: "/superadmin",
+          label: t("Платформа", "Платформа"),
+          icon: <Users size={18} />,
+        },
+      ];
+    }
 
     return [
       {
@@ -210,12 +245,22 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   const pageTitle = getPageTitle(pathname, user?.role, uiLanguage);
-  const pageSubtitle = user?.role === "teacher" ? t("Панель преподавателя", "Оқытушы панелі") : t("Панель студента", "Оқушы панелі");
+  const pageSubtitle = (() => {
+    if (user?.role === "teacher") return t("Панель преподавателя", "Оқытушы панелі");
+    if (user?.role === "institution_admin") return t("Панель администратора учреждения", "Оқу орны әкімшісінің панелі");
+    if (user?.role === "methodist") return t("Панель методиста", "Әдіскер панелі");
+    return t("Панель студента", "Оқушы панелі");
+  })();
   const userInitial = (user?.username?.charAt(0) || "U").toUpperCase();
 
   const logout = () => {
     clearSession();
-    router.replace("/");
+    const target = publicPath("/");
+    if (target.startsWith("http://") || target.startsWith("https://")) {
+      window.location.assign(target);
+    } else {
+      router.replace(target || "/");
+    }
   };
 
   const toggleCollapsed = () => {
@@ -314,7 +359,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span className={styles.avatar}>{userInitial}</span>
                 <div className={styles.mobileProfileMeta}>
                   <span className={styles.userName}>{user?.username ?? "user"}</span>
-                  <span className={styles.userRole}>{user?.role === "teacher" ? t("Учитель", "Оқытушы") : t("Студент", "Оқушы")}</span>
+                  <span className={styles.userRole}>
+                    {user?.role === "teacher"
+                      ? t("Учитель", "Оқытушы")
+                      : user?.role === "institution_admin"
+                        ? t("Админ учреждения", "Оқу орны админі")
+                        : user?.role === "methodist"
+                          ? t("Методист", "Әдіскер")
+                          : t("Студент", "Оқушы")}
+                  </span>
                 </div>
               </button>
               <Button block variant="ghost" onClick={logout}>
@@ -364,7 +417,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <span className={styles.avatar}>{userInitial}</span>
               <div className={styles.profileMeta}>
                 <span className={styles.userName}>{user?.username ?? "user"}</span>
-                <span className={styles.userRole}>{user?.role === "teacher" ? t("Учитель", "Оқытушы") : t("Студент", "Оқушы")}</span>
+                <span className={styles.userRole}>
+                  {user?.role === "teacher"
+                    ? t("Учитель", "Оқытушы")
+                    : user?.role === "institution_admin"
+                      ? t("Админ учреждения", "Оқу орны админі")
+                      : user?.role === "methodist"
+                        ? t("Методист", "Әдіскер")
+                        : t("Студент", "Оқушы")}
+                </span>
               </div>
             </button>
 

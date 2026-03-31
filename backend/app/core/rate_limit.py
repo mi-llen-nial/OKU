@@ -17,7 +17,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Keep docs and health-style endpoints unrestricted.
-        if request.url.path in {"/", "/docs", "/redoc", "/openapi.json", "/metrics"}:
+        if request.url.path in {"/", "/docs", "/redoc", "/openapi.json", "/metrics", "/healthz", "/readyz"}:
             return await call_next(request)
 
         client_ip = _extract_client_ip(request)

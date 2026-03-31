@@ -2,7 +2,7 @@
   email {$LETSENCRYPT_EMAIL}
 }
 
-{$APP_DOMAIN}, www.{$APP_DOMAIN} {
+{$APP_DOMAIN}, www.{$APP_DOMAIN}, app.{$APP_DOMAIN} {
   encode zstd gzip
   reverse_proxy frontend:3000
 

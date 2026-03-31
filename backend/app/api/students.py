@@ -9,6 +9,8 @@ from app.models import (
     GroupMembership,
     TeacherAuthoredTest,
     TeacherAuthoredTestGroup,
+    TestAssignment,
+    TestModerationStatus,
     Test,
     TestSession,
     User,
@@ -96,17 +98,35 @@ def my_group_tests(db: DBSession, current_user: User = Depends(require_role(User
         return []
 
     group_ids = sorted(groups_by_id.keys())
-    tests_stmt = (
+    assignment_rows = db.execute(
+        select(TeacherAuthoredTest, TestAssignment.group_id)
+        .join(TestAssignment, TestAssignment.test_id == TeacherAuthoredTest.id)
+        .options(selectinload(TeacherAuthoredTest.questions), joinedload(TeacherAuthoredTest.teacher))
+        .where(
+            TestAssignment.group_id.in_(group_ids),
+            TeacherAuthoredTest.moderation_status == TestModerationStatus.approved,
+        )
+        .order_by(TeacherAuthoredTest.created_at.desc())
+    ).all()
+    assigned_test_ids = {int(item[0].id) for item in assignment_rows}
+
+    legacy_stmt = (
         select(TeacherAuthoredTest, TeacherAuthoredTestGroup.group_id)
         .join(
             TeacherAuthoredTestGroup,
             TeacherAuthoredTestGroup.test_id == TeacherAuthoredTest.id,
         )
         .options(selectinload(TeacherAuthoredTest.questions), joinedload(TeacherAuthoredTest.teacher))
-        .where(TeacherAuthoredTestGroup.group_id.in_(group_ids))
+        .where(
+            TeacherAuthoredTestGroup.group_id.in_(group_ids),
+            TeacherAuthoredTest.id.not_in(sorted(assigned_test_ids) or [-1]),
+            TeacherAuthoredTest.institution_id.is_(None),
+        )
         .order_by(TeacherAuthoredTest.created_at.desc())
     )
-    rows = db.execute(tests_stmt).all()
+    legacy_rows = db.execute(legacy_stmt).all()
+    rows = list(assignment_rows) + list(legacy_rows)
+    rows.sort(key=lambda item: item[0].created_at, reverse=True)
 
     completed_by_custom_test_id: dict[int, Test] = {}
     completed_tests = db.scalars(
@@ -135,6 +155,12 @@ def my_group_tests(db: DBSession, current_user: User = Depends(require_role(User
         if not group:
             continue
         completed_test = completed_by_custom_test_id.get(int(custom_test.id))
+        # Transitional compatibility:
+        # - institution-scoped tests are visible only through explicit TestAssignment
+        # - legacy link fallback is preserved only for pre-institutional tests
+        if int(custom_test.id) not in assigned_test_ids and custom_test.institution_id is not None:
+            continue
+
         payload.append(
             GroupTestSummaryResponse(
                 custom_test_id=custom_test.id,

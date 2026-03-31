@@ -6,7 +6,9 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { login } from "@/lib/api";
 import { isRememberMeEnabled, saveSession } from "@/lib/auth";
+import { resolveRoleHome } from "@/lib/navigation";
 import { tr, useUiLanguage } from "@/lib/i18n";
+import AuthHomeLink from "@/components/AuthHomeLink";
 import { assetPaths } from "@/src/assets";
 import styles from "@/app/auth.module.css";
 
@@ -45,7 +47,7 @@ export default function LoginPage() {
           ? new URLSearchParams(window.location.search).get("next")?.trim() || ""
           : "";
       const safeNext = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
-      router.push(safeNext || (response.user.role === "teacher" ? "/teacher" : "/dashboard"));
+      router.push(safeNext || resolveRoleHome(response.user.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Не удалось выполнить вход", "Кіру орындалмады"));
     } finally {
@@ -54,7 +56,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className={styles.authSplit}>
+    <>
+      <AuthHomeLink />
+      <div className={styles.authSplit}>
       <section className={styles.brandPanel}>
         <img className={styles.brandLogo} src={assetPaths.logo.svg} alt="OKU" />
       </section>
@@ -88,6 +92,12 @@ export default function LoginPage() {
             />
           </label>
 
+          <div className={styles.forgotRow}>
+            <Link className={styles.forgotLink} href="/forgot-password">
+              {t("Забыли пароль?", "Құпиясөзді ұмыттыңыз ба?")}
+            </Link>
+          </div>
+
           <label className={styles.rememberRow}>
             <input
               checked={rememberMe}
@@ -112,5 +122,6 @@ export default function LoginPage() {
         </form>
       </section>
     </div>
+    </>
   );
 }

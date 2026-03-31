@@ -10,7 +10,7 @@
 docker compose up -d --build
 ```
 
-См. детальные шаги и переменные в [README](../README.md), раздел `Docker Compose deploy`.
+См. детальные шаги и переменные в [project.md](../project.md), раздел «Docker Compose deploy».
 
 ## 1) Backend service
 

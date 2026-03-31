@@ -1,13 +1,12 @@
 "use client";
 
-import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import Button from "@/components/ui/Button";
-import { createTeacherGroup, getTeacherGroupMembers, getTeacherGroups } from "@/lib/api";
+import { getTeacherGroupMembers, getTeacherGroups } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { tr, useUiLanguage } from "@/lib/i18n";
 import { TeacherGroup } from "@/lib/types";
@@ -41,9 +40,6 @@ export default function TeacherGroupsPage() {
   const [attentionLoading, setAttentionLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [groupName, setGroupName] = useState("");
-  const [createLoading, setCreateLoading] = useState(false);
 
   useEffect(() => {
     const token = getToken();
@@ -106,30 +102,6 @@ export default function TeacherGroupsPage() {
     };
   }, [uiLanguage]);
 
-  const createGroup = async () => {
-    const token = getToken();
-    if (!token) return;
-    const normalizedName = groupName.trim();
-    if (!normalizedName) {
-      setError(t("Введите название группы.", "Топ атауын енгізіңіз."));
-      return;
-    }
-
-    try {
-      setCreateLoading(true);
-      setError("");
-      const group = await createTeacherGroup(token, { name: normalizedName });
-      setCreateModalOpen(false);
-      setGroupName("");
-      setSuccess(t("Группа успешно создана.", "Топ сәтті құрылды."));
-      router.push(`/teacher/groups/${group.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("Не удалось создать группу", "Топ құру мүмкін болмады"));
-    } finally {
-      setCreateLoading(false);
-    }
-  };
-
   return (
     <AuthGuard roles={["teacher"]}>
       <AppShell>
@@ -140,9 +112,9 @@ export default function TeacherGroupsPage() {
                 <h2 className={styles.title}>{t("Группы", "Топтар")}</h2>
                 <p className={styles.subtitle}>{t("Группы с вашими учениками", "Оқушыларыңыз бар топтар")}</p>
               </div>
-              <Button onClick={() => setCreateModalOpen(true)} className={styles.actionButton}>
-                <img className={styles.actionIcon} src={assetPaths.icons.plus} alt="" aria-hidden="true" />
-                <span>{t("Создать группу", "Топ құру")}</span>
+              <Button onClick={() => router.push("/teacher/tests")} className={styles.actionButton}>
+                <img className={styles.actionIcon} src={assetPaths.icons.lesson} alt="" aria-hidden="true" />
+                <span>{t("Мои тесты", "Менің тесттерім")}</span>
               </Button>
             </header>
 
@@ -166,8 +138,7 @@ export default function TeacherGroupsPage() {
 
             {!loading && groups.length === 0 && (
               <div className={styles.emptyState}>
-                <p>{t("У вас пока нет групп.", "Сізде әлі топтар жоқ.")}</p>
-                <Button onClick={() => setCreateModalOpen(true)}>{t("Создать первую группу", "Алғашқы топты құру")}</Button>
+                <p>{t("У вас пока нет назначенных групп.", "Сізге әлі топтар тағайындалмаған.")}</p>
               </div>
             )}
           </section>
@@ -214,38 +185,6 @@ export default function TeacherGroupsPage() {
 
           <footer className={styles.footer}>oku.com.kz</footer>
         </div>
-
-        {createModalOpen && (
-          <div className={styles.modalOverlay} onClick={() => setCreateModalOpen(false)} role="presentation">
-            <section className={styles.modal} onClick={(event) => event.stopPropagation()}>
-              <button
-                type="button"
-                className={styles.close}
-                onClick={() => setCreateModalOpen(false)}
-                aria-label={t("Закрыть", "Жабу")}
-              >
-                <X size={16} />
-              </button>
-              <h3>{t("Создание группы", "Топ құру")}</h3>
-              <label>
-                {t("Название", "Атауы")}
-                <input
-                  maxLength={120}
-                  value={groupName}
-                  onChange={(event) => setGroupName(event.target.value)}
-                />
-              </label>
-              <div className={styles.modalActions}>
-                <Button block onClick={createGroup} disabled={createLoading}>
-                  {createLoading ? t("Создаем...", "Құрылуда...") : t("Создать", "Құру")}
-                </Button>
-                <Button block variant="ghost" onClick={() => setCreateModalOpen(false)}>
-                  {t("Отмена", "Бас тарту")}
-                </Button>
-              </div>
-            </section>
-          </div>
-        )}
       </AppShell>
     </AuthGuard>
   );

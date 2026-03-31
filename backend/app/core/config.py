@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic import AliasChoices, Field
@@ -33,6 +34,8 @@ class Settings(BaseSettings):
     refresh_cookie_name: str = "oku_refresh_token"
     admin_key: str = ""
 
+    # Comma-separated allowed browser origins. Two env names are supported for backwards
+    # compatibility; see `cors_origins_list` which merges both if both are set.
     cors_origins: str = Field(
         default="http://localhost:3000",
         validation_alias=AliasChoices("CORS_ORIGINS", "BACKEND_CORS_ORIGINS"),
@@ -91,6 +94,11 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_per_minute: int = 180
 
+    # Where teacher question images/materials are stored.
+    # "db" keeps inline `image_data_url` in Postgres JSON (current behavior).
+    # "object" is prepared for future S3-compatible migration (ref fields only for now).
+    material_storage_mode: str = "db"
+
     sentry_dsn: str = ""
     metrics_enabled: bool = True
     otel_enabled: bool = False
@@ -125,10 +133,28 @@ class Settings(BaseSettings):
     resend_base_url: str = "https://api.resend.com"
     resend_timeout_seconds: int = 20
 
+    # Password reset (Resend email + one-time token)
+    password_reset_token_ttl_minutes: int = 30
+    password_reset_request_resend_cooldown_seconds: int = 60
+    frontend_app_url: str = Field(default="", validation_alias=AliasChoices("NEXT_PUBLIC_APP_URL", "FRONTEND_APP_URL"))
+
     @property
     def cors_origins_list(self) -> list[str]:
+        """
+        Merge `CORS_ORIGINS` and `BACKEND_CORS_ORIGINS` from the environment when both are set.
+        Pydantic only keeps one value in `cors_origins`, so reading both keys avoids losing origins
+        (e.g. localhost from one line and app.oku.com.kz from another).
+        """
+        merged_chunks: list[str] = []
+        for key in ("CORS_ORIGINS", "BACKEND_CORS_ORIGINS"):
+            raw = (os.environ.get(key) or "").strip()
+            if raw:
+                merged_chunks.append(raw)
+
+        combined = ",".join(merged_chunks) if merged_chunks else (self.cors_origins or "")
+
         origins: list[str] = []
-        for raw_origin in self.cors_origins.split(","):
+        for raw_origin in combined.split(","):
             normalized = raw_origin.strip().rstrip("/")
             if normalized:
                 origins.append(normalized)

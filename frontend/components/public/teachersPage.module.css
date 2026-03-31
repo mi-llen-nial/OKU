@@ -1,0 +1,500 @@
+/* Страница «Педагогу» — публичный маркетинг */
+.page {
+  --tp-accent: #6a63f5;
+  --tp-ink: #262626;
+  --tp-gray: #626262;
+  --tp-stroke: #e2e2ec;
+  --tp-muted: #8a8a8a;
+  --tp-inactive-tab: #b5b2e5;
+
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--tp-ink);
+
+  /* Явный max-width как на главной странице */
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── Hero (горизонталь задаёт .main в PublicSiteLayout) ── */
+.hero {
+  padding: 80px 0 80px;
+}
+
+.heroTitle {
+  margin: 0 0 4px;
+  text-align: center;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 36px;
+  color: var(--tp-ink);
+}
+
+.heroSubtitle {
+  margin: 0;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 450;
+  line-height: 24px;
+  color: var(--tp-gray);
+}
+
+.tabSwitcherWrap {
+  display: flex;
+  justify-content: center;
+  margin: 32px 0 40px;
+  padding: 0;
+}
+
+.tabSwitcher {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: 632px;
+  height: 45px;
+  padding: 2px;
+  border: 1px solid var(--tp-stroke);
+  border-radius: 999px;
+  box-sizing: border-box;
+}
+
+.tabIndicator {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: calc(33.333% - 2.67px);
+  border-radius: 31px;
+  background: var(--tp-accent);
+  transition: left 0.3s ease;
+  pointer-events: none;
+}
+
+.tabIndicatorManual {
+  left: 2px;
+}
+
+.tabIndicatorAi {
+  left: calc(33.333% + 1px);
+}
+
+.tabIndicatorFile {
+  left: calc(66.666% + 0px);
+}
+
+.tabBtn {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  margin: 0;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  line-height: 16px;
+  letter-spacing: -0.03em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.25s ease;
+}
+
+.tabBtnActive {
+  font-weight: 450;
+  color: #fff;
+}
+
+.tabBtnInactive {
+  font-weight: 350;
+  color: var(--tp-inactive-tab);
+}
+
+.heroPanel {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Две колонки: текст + плашка | SVG-иллюстрация ── */
+.twoCol {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: clamp(24px, 4vw, 48px);
+}
+
+.leftCol {
+  flex: 0 1 480px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 8px;
+}
+
+.modeImageWrap {
+  width: 100%;
+  margin-left: auto;
+}
+
+.modeImage {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+}
+
+.featureIconImg {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.lead {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 450;
+  line-height: 20px;
+  color: var(--tp-ink);
+}
+
+.featureCard {
+  width: 100%;
+  max-width: 300px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--tp-accent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Анимация при смене режима */
+@keyframes teachersTabEnter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tabPanelRoot .lead {
+  animation: teachersTabEnter 0.42s cubic-bezier(0.22, 1, 0.36, 1) 0s both;
+}
+
+.tabPanelRoot .featureCard {
+  animation: teachersTabEnter 0.42s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.tabPanelRoot .modeImageWrap {
+  animation: teachersTabEnter 0.42s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabPanelRoot .lead,
+  .tabPanelRoot .featureCard,
+  .tabPanelRoot .modeImageWrap {
+    animation: none;
+  }
+}
+
+.featureTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 450;
+  line-height: 16px;
+  color: #fff;
+}
+
+.featureSub {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 350;
+  line-height: 14px;
+  color: var(--tp-inactive-tab);
+}
+
+.rightCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Desktop: иллюстрация — половина ширины экрана (от вертикали центра viewport до правого края) */
+@media (min-width: 901px) {
+  .leftCol {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 480px;
+  }
+
+  .rightColBleed {
+    flex: 0 0 50vw;
+    width: 50vw;
+    min-width: 0;
+    max-width: 50vw;
+    margin-right: calc(-1 * var(--public-page-pad-x, 16px));
+  }
+
+  .rightColBleed .modeImageWrap {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+  }
+}
+
+/* ── Достоверность ── */
+.reliability {
+  padding: 80px 0 120px;
+}
+
+.relTitle {
+  margin: 0 0 80px;
+  text-align: center;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 36px;
+  color: var(--tp-ink);
+}
+
+.relInner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(24px, 4vw, 48px);
+}
+
+.relCopy {
+  flex: 1;
+  min-width: 0;
+  max-width: 646px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.relBlockHead {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.relHeadingRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.relDiamond {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.relHeading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 450;
+  line-height: 20px;
+  color: var(--tp-ink);
+}
+
+.relBody {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 350;
+  line-height: 16px;
+  color: var(--tp-gray);
+}
+
+.warnTitle {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 450;
+  line-height: 16px;
+  color: var(--tp-ink);
+}
+
+.warnCols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.warnCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.warnRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.warnCheckImg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
+}
+
+.warnText {
+  font-size: 14px;
+  font-weight: 350;
+  line-height: 14px;
+  color: var(--tp-gray);
+}
+
+.relIllustration {
+  flex-shrink: 0;
+  width: min(100%, 280px);
+  height: 240px;
+  position: relative;
+}
+
+.relIllustration img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+@media (max-width: 900px) {
+  /* Между «Педагогу» и «Достоверность»: 60px + 60px = 120px (без дублирования 80+80) */
+  .hero {
+    padding-bottom: 60px;
+  }
+
+  .reliability {
+    padding-top: 60px;
+  }
+
+  /* Селектор → сразу иллюстрация → текст и плашка */
+  .hero .tabSwitcherWrap {
+    margin: 32px 0 0;
+  }
+
+  .heroPanel {
+    margin-top: 12px;
+  }
+
+  .tabPanelRoot .twoCol {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 24px;
+    min-height: 0;
+  }
+
+  .tabPanelRoot .leftCol {
+    order: 1;
+    padding-top: 0;
+    flex: 0 0 auto;
+  }
+
+  .tabPanelRoot .rightColBleed {
+    order: -1;
+  }
+
+  /* Базовый .rightCol { flex: 1 } в колонке давал flex-grow → «фантомная» высота под картинкой */
+  .tabPanelRoot .rightCol {
+    flex: 0 0 auto;
+    justify-content: flex-start;
+  }
+
+  .leftCol {
+    max-width: none;
+  }
+
+  .featureCard {
+    max-width: none;
+  }
+
+  .rightColBleed {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin-right: 0;
+  }
+
+  .modeImageWrap {
+    max-width: none;
+    width: calc(100% + 2 * var(--public-page-pad-x, 16px));
+    margin-left: calc(-1 * var(--public-page-pad-x, 16px));
+    margin-right: calc(-1 * var(--public-page-pad-x, 16px));
+  }
+
+  .relInner {
+    flex-direction: column;
+  }
+
+  /* Иллюстрация выше блока «Система предупреждений» */
+  .relIllustration {
+    order: -1;
+    width: min(100%, 280px);
+    margin: 0 auto;
+  }
+
+  .relCopy {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero {
+    padding-top: 96px;
+  }
+
+  .heroTitle {
+    font-size: 28px;
+    line-height: 28px;
+  }
+
+  .heroSubtitle {
+    font-size: 18px;
+    line-height: 18px;
+  }
+
+  .tabSwitcher {
+    height: auto;
+    min-height: 45px;
+    flex-wrap: wrap;
+    border-radius: 16px;
+  }
+
+  .tabIndicator {
+    display: none;
+  }
+
+  .tabBtn {
+    flex: 1 1 100%;
+    padding: 10px 8px;
+    border-radius: 12px;
+  }
+
+  .tabBtnActive {
+    background: var(--tp-accent);
+    color: #fff;
+  }
+
+  .tabBtnInactive {
+    color: var(--tp-gray);
+  }
+
+  .relTitle {
+    font-size: 28px;
+    line-height: 28px;
+    margin-bottom: 40px;
+  }
+}

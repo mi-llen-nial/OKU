@@ -5,10 +5,16 @@ import { useEffect, useMemo, useState } from "react";
 
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
-import { getTeacherCustomTest, getTeacherCustomTests } from "@/lib/api";
+import {
+  assignTeacherCustomTestToGroups,
+  getTeacherCustomTest,
+  getTeacherCustomTests,
+  submitTeacherCustomTestForReview,
+} from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
 import { tr, uiLocale, useUiLanguage } from "@/lib/i18n";
-import { TeacherCustomQuestion, TeacherCustomTest, TeacherCustomTestDetails } from "@/lib/types";
+import { toast } from "@/lib/toast";
+import { TeacherCustomQuestion, TeacherCustomTest, TeacherCustomTestDetails, TestModerationStatus } from "@/lib/types";
 import { assetPaths } from "@/src/assets";
 import styles from "@/app/teacher/tests/tests.module.css";
 
@@ -152,28 +158,32 @@ export default function TeacherCustomTestsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [loadingEditId, setLoadingEditId] = useState<number | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
-  useEffect(() => {
+  const loadTests = async () => {
     const token = getToken();
     if (!token) return;
+    try {
+      setLoading(true);
+      setError("");
+      const payload = await getTeacherCustomTests(token);
+      setTests(payload);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : t("Не удалось загрузить тесты.", "Тесттерді жүктеу мүмкін болмады."),
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        setLoading(true);
-        setError("");
-        const payload = await getTeacherCustomTests(token);
-        if (!cancelled) setTests(payload);
-      } catch (requestError) {
-        if (!cancelled) {
-          setError(
-            requestError instanceof Error
-              ? requestError.message
-              : t("Не удалось загрузить тесты.", "Тесттерді жүктеу мүмкін болмады."),
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+      if (!cancelled) {
+        await loadTests();
       }
     })();
 
@@ -199,7 +209,7 @@ export default function TeacherCustomTestsPage() {
       setLoadingEditId(testId);
       const details = await getTeacherCustomTest(token, testId);
       localStorage.setItem(toDraftStorageKey(user.id), JSON.stringify(mapDetailsToDraft(details)));
-      router.push("/teacher/create-test");
+      router.push(`/teacher/create-test?edit=${testId}`);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -208,6 +218,64 @@ export default function TeacherCustomTestsPage() {
       );
     } finally {
       setLoadingEditId(null);
+    }
+  };
+
+  const moderationLabel = (status: TestModerationStatus): string => {
+    if (status === "submitted_for_review") return t("Отправлен на модерацию", "Модерацияға жіберілді");
+    if (status === "in_review") return t("На проверке методиста", "Әдіскер тексеруде");
+    if (status === "needs_revision") return t("Нужны доработки", "Түзету қажет");
+    if (status === "approved") return t("Одобрен", "Мақұлданды");
+    if (status === "rejected") return t("Отклонён", "Қабылданбады");
+    if (status === "archived") return t("Архив", "Мұрағат");
+    return t("Черновик", "Қаралама");
+  };
+
+  const submitForReview = async (test: TeacherCustomTest) => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      setActionLoadingId(test.id);
+      await submitTeacherCustomTestForReview(token, test.id);
+      toast.success(t("Тест отправлен на модерацию.", "Тест модерацияға жіберілді."));
+      await loadTests();
+    } catch (requestError) {
+      toast.error(
+        requestError instanceof Error
+          ? requestError.message
+          : t("Не удалось отправить тест на модерацию.", "Тестті модерацияға жіберу мүмкін болмады."),
+      );
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const assignApprovedTest = async (test: TeacherCustomTest) => {
+    const token = getToken();
+    if (!token) return;
+    const groupIds = test.groups.map((item) => Number(item.id)).filter((value) => Number.isFinite(value) && value > 0);
+    if (groupIds.length === 0) {
+      toast.error(
+        t(
+          "Укажите группы в тесте перед назначением.",
+          "Тағайындаудан бұрын тестте топтарды көрсетіңіз.",
+        ),
+      );
+      return;
+    }
+    try {
+      setActionLoadingId(test.id);
+      await assignTeacherCustomTestToGroups(token, test.id, groupIds);
+      toast.success(t("Тест назначен выбранным группам.", "Тест таңдалған топтарға тағайындалды."));
+      await loadTests();
+    } catch (requestError) {
+      toast.error(
+        requestError instanceof Error
+          ? requestError.message
+          : t("Не удалось назначить тест группам.", "Тестті топтарға тағайындау мүмкін болмады."),
+      );
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -236,6 +304,12 @@ export default function TeacherCustomTestsPage() {
               {sortedTests.map((test) => {
                 const groupsCount = test.groups.length;
                 const dueMeta = resolveDueDate(test.due_date, uiLanguage);
+                const moderationStatus = (test.moderation_status || "draft") as TestModerationStatus;
+                const canSubmitForReview =
+                  moderationStatus === "draft" ||
+                  moderationStatus === "needs_revision" ||
+                  moderationStatus === "rejected";
+                const canAssignApproved = moderationStatus === "approved";
                 return (
                   <article className={styles.card} key={test.id}>
                     <div className={styles.cardTop}>
@@ -271,6 +345,17 @@ export default function TeacherCustomTestsPage() {
                       </div>
                     </div>
 
+                    <div className={styles.statusRow}>
+                      <span className={`${styles.statusBadge} ${styles[`status_${moderationStatus}`] || ""}`}>
+                        {moderationLabel(moderationStatus)}
+                      </span>
+                      {test.moderation_comment ? (
+                        <span className={styles.statusComment} title={test.moderation_comment}>
+                          {test.moderation_comment}
+                        </span>
+                      ) : null}
+                    </div>
+
                     <div className={styles.cardActions}>
                       <button
                         type="button"
@@ -289,6 +374,32 @@ export default function TeacherCustomTestsPage() {
                           ? t("Открываем...", "Ашылуда...")
                           : t("Редактировать", "Өңдеу")}
                       </button>
+                    </div>
+                    <div className={styles.workflowActions}>
+                      {canSubmitForReview ? (
+                        <button
+                          type="button"
+                          className={styles.workflowButton}
+                          disabled={actionLoadingId === test.id}
+                          onClick={() => void submitForReview(test)}
+                        >
+                          {actionLoadingId === test.id
+                            ? t("Отправляем...", "Жіберілуде...")
+                            : t("Отправить на модерацию", "Модерацияға жіберу")}
+                        </button>
+                      ) : null}
+                      {canAssignApproved ? (
+                        <button
+                          type="button"
+                          className={styles.workflowButtonSecondary}
+                          disabled={actionLoadingId === test.id}
+                          onClick={() => void assignApprovedTest(test)}
+                        >
+                          {actionLoadingId === test.id
+                            ? t("Назначаем...", "Тағайындалуда...")
+                            : t("Назначить группам", "Топтарға тағайындау")}
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 );

@@ -23,11 +23,16 @@ def get_queue(name: str = "default") -> Queue | None:
         return None
 
 
-def enqueue_task(task: Callable[..., Any], *args: Any, **kwargs: Any) -> str | None:
+def enqueue_task(
+    task: Callable[..., Any],
+    *args: Any,
+    meta: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> str | None:
     queue = get_queue()
     if not queue:
         return None
-    job = queue.enqueue(task, *args, **kwargs)
+    job = queue.enqueue(task, *args, meta=meta, **kwargs)
     return job.id
 
 
@@ -39,11 +44,19 @@ def get_job_status(job_id: str) -> dict[str, Any] | None:
         job = Job.fetch(job_id, connection=queue.connection)
     except Exception:  # noqa: BLE001
         return None
+    owner_user_id: int | None = None
+    try:
+        if isinstance(job.meta, dict) and "user_id" in job.meta:
+            owner_user_id = int(job.meta.get("user_id"))
+    except Exception:  # noqa: BLE001
+        owner_user_id = None
+
     return {
         "id": job.id,
         "status": job.get_status(refresh=True),
         "result": job.result,
         "enqueued_at": job.enqueued_at.isoformat() if job.enqueued_at else None,
         "ended_at": job.ended_at.isoformat() if job.ended_at else None,
+        "owner_user_id": owner_user_id,
     }
 

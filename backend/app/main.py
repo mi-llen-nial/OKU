@@ -3,19 +3,24 @@ from hashlib import sha256
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.auth import router as auth_router
 from app.api.catalog import router as catalog_router
+from app.api.institution_admin import router as institution_admin_router
 from app.api.jobs import router as jobs_router
+from app.api.methodist import router as methodist_router
 from app.api.profile import router as profile_router
 from app.api.students import router as students_router
 from app.api.subjects import router as subjects_router
 from app.api.teacher import router as teacher_router
+from app.api.teacher_applications import router as teacher_applications_router
 from app.api.tests import router as tests_router
 from app.api.v2 import router as v2_router
+from app.api.superadmin import router as superadmin_router
 from app.core.config import settings
 from app.core.logging_config import configure_logging
 from app.core.rate_limit import RateLimitMiddleware
@@ -61,7 +66,55 @@ def startup_event() -> None:
 def root() -> dict[str, str]:
     return {"status": "ok", "docs": "/docs", "api_prefix": settings.api_prefix_normalized}
 
-_v1_routers = [auth_router, subjects_router, tests_router, students_router, teacher_router, profile_router, catalog_router, jobs_router]
+
+@app.get("/healthz")
+def healthz() -> dict[str, str]:
+    # Minimal liveness endpoint: cheap and never touches external dependencies.
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz() -> JSONResponse:
+    # Readiness endpoint: used by container healthchecks/orchestrators.
+    db_ok = False
+    redis_ok = True
+    try:
+        with engine.connect() as conn:
+            db_ok = bool(conn.execute(select(1)).scalar_one())
+    except Exception:  # noqa: BLE001
+        db_ok = False
+
+    # If Redis cache is disabled in config, readiness should not fail.
+    try:
+        if getattr(cache, "enabled", False):
+            redis_ok = bool(cache.ping())
+    except Exception:  # noqa: BLE001
+        redis_ok = False
+
+    ok = bool(db_ok and redis_ok)
+    return JSONResponse(
+        status_code=200 if ok else 503,
+        content={
+            "status": "ready" if ok else "not_ready",
+            "db_ok": db_ok,
+            "redis_ok": redis_ok,
+        },
+    )
+
+_v1_routers = [
+    auth_router,
+    subjects_router,
+    tests_router,
+    students_router,
+    teacher_router,
+    teacher_applications_router,
+    institution_admin_router,
+    methodist_router,
+    profile_router,
+    catalog_router,
+    jobs_router,
+    superadmin_router,
+]
 for _router in _v1_routers:
     app.include_router(_router, prefix=settings.api_prefix_normalized)
 

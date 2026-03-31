@@ -18,9 +18,15 @@ def enqueue_ping(_: CurrentUser) -> dict[str, str]:
 
 
 @router.get("/{job_id}")
-def job_status(job_id: str, _: CurrentUser) -> dict:
+def job_status(job_id: str, current_user: CurrentUser) -> dict:
     status_payload = get_job_status(job_id)
     if not status_payload:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    owner_user_id = status_payload.get("owner_user_id")
+    if owner_user_id is not None and int(owner_user_id) != int(current_user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough rights")
+
+    # Hide internal owner field from response payload.
+    status_payload.pop("owner_user_id", None)
     return status_payload
 

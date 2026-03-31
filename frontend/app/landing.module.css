@@ -1,450 +1,522 @@
+/* Landing: Inter, -3% letter-spacing, акцент #6A63F5; line-height: 1 по макету */
 .page {
+  --landing-accent: #6a63f5;
+  --landing-ink: #262626;
+  --landing-gray: #626262;
+  --landing-stroke: #e2e2ec;
+  --landing-radius: 20px;
+
   min-height: 100vh;
   background: #ffffff;
-  color: #262626;
+  color: var(--landing-ink);
+  letter-spacing: -0.03em;
   overflow-x: clip;
+  line-height: 1;
 }
 
 .main {
   width: 100%;
-  max-width: 1120px;
+  max-width: 1920px;
   margin: 0 auto;
-  padding: 0 24px;
-  display: grid;
-  gap: 80px;
+  padding: 0 0 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 120px;
 }
 
+/* Hero */
 .hero {
-  min-height: 72svh;
-  display: grid;
-  justify-items: center;
-  align-content: center;
+  min-height: 48svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  gap: 12px;
+  gap: 16px;
+  padding: 120px 0px;
 }
 
 .heroLogo {
-  width: 176px;
-  height: 176px;
+  width: 160px;
+  height: 160px;
   object-fit: contain;
 }
 
-.heroBrandLogo {
-  width: min(100%, 230px);
+.heroWordmark {
+  width: min(100%, 220px);
   height: auto;
   object-fit: contain;
 }
 
-.heroText {
+.heroTagline {
   margin: 0;
-  max-width: 430px;
-  font-size: 16px;
-  line-height: 1.2;
-  font-weight: 350;
-  color: #626262;
-}
-
-.heroActions {
-  margin-top: 4px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ctaPrimary {
-  width: 180px;
-  min-height: 36px;
-  border-radius: 8px;
-  background: #6a63f5;
-  color: #ffffff;
+  max-width: 520px;
   font-size: 16px;
   line-height: 1;
   font-weight: 350;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 14px;
-  transition: opacity 0.14s ease;
-}
-
-.ctaPrimary:hover {
-  opacity: 0.9;
+  color: var(--landing-gray);
 }
 
 .section {
-  display: grid;
-  gap: 28px;
-}
-
-.sectionHeader {
-  text-align: center;
-  display: grid;
-  gap: 8px;
-}
-
-.sectionTitle {
   margin: 0;
-  font-size: 24px;
-  line-height: 1.15;
-  font-weight: 600;
+  padding: 0;
 }
 
-.sectionText {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.25;
-  font-weight: 350;
-  color: #626262;
-}
-
-.goalCard {
-  border-radius: 28px;
-  min-height: 260px;
-  background: linear-gradient(90deg, #6a63f5 0%, #5d59dc 100%);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: center;
-  gap: 28px;
-  padding: 18px 34px;
-}
-
-.goalImage {
-  width: min(100%, 430px);
-  justify-self: center;
-  object-fit: contain;
-}
-
-.goalBody {
-  display: grid;
-  gap: 10px;
-}
-
-.displayTitle {
-  margin: 0;
-  font-size: 64px;
-  line-height: 0.94;
-  letter-spacing: -0.02em;
-  font-weight: 600;
-  color: #ffffff;
-  text-transform: uppercase;
-}
-
-.displayTextOnColor {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.2;
-  font-weight: 350;
-  color: #ffffff;
-  max-width: 360px;
-}
-
-.modesGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
-}
-
-.modeItem {
-  text-align: center;
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-}
-
-.modeIcon {
-  width: 58px;
-  height: 58px;
-  object-fit: contain;
-}
-
-.modeTitle {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.1;
-  font-weight: 600;
-}
-
-.modeText {
-  margin: 0;
-  max-width: 280px;
-  font-size: 14px;
-  line-height: 1.2;
-  font-weight: 350;
-  color: #626262;
-}
-
-.featureRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  align-items: center;
-  gap: 24px;
-}
-
-.featureRowReverse {
-  grid-template-columns: 320px minmax(0, 1fr);
-}
-
-.featureTextBlock {
-  display: grid;
-  gap: 10px;
-}
-
-.displayTitleColor {
-  margin: 0;
-  font-size: 64px;
-  line-height: 0.95;
-  letter-spacing: -0.02em;
-  font-weight: 600;
-  color: #6a63f5;
-}
-
-.featureText {
-  margin: 0;
-  max-width: 700px;
-  font-size: 16px;
-  line-height: 1.2;
-  font-weight: 350;
-  color: #6a63f5;
-}
-
-.featureImage {
-  width: min(100%, 320px);
-  object-fit: contain;
-  justify-self: center;
-}
-
-.teacherCard {
-  border-radius: 28px;
-  background: linear-gradient(90deg, #6a63f5 0%, #5f5be0 100%);
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr);
-  min-height: 370px;
-  gap: 10px;
-  padding: 40px 48px;
-  align-items: center;
-  overflow: hidden;
-}
-
-.teacherBody {
-  display: grid;
-  gap: 20px;
-  align-content: center;
-  align-self: center;
-  padding-bottom: 0;
-}
-
-.teacherTitle {
-  margin: 0;
-  font-size: clamp(42px, 5vw, 64px);
-  line-height: 0.9;
-  letter-spacing: -0.02em;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.teacherTags {
+/* 32px от заголовка секции до контента */
+.sectionWithTitle {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  max-width: 760px;
+  flex-direction: column;
+  gap: 32px;
 }
 
-.teacherTag {
-  border-radius: 999px;
-  padding: 9px 24px;
-  background: #ffffff;
-  color: #6a63f5;
+.sectionHeading {
+  margin: 0;
+  font-size: 36px;
+  line-height: 1;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.sectionHeadingCenter {
+  margin: 0;
+  text-align: center;
+  font-size: 36px;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--landing-ink);
+}
+
+/* Миссия — заливка акцентом */
+.missionCard {
+  border-radius: var(--landing-radius);
+  background-color: var(--landing-accent);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 48px);
+  padding: clamp(28px, 4vw, 48px) clamp(24px, 4vw, 56px);
+  min-height: 280px;
+}
+
+.missionImage {
+  width: min(100%, 400px);
+  max-height: 280px;
+  object-fit: contain;
+  justify-self: center;
+}
+
+.missionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.missionText {
+  margin: 0;
   font-size: 16px;
   line-height: 1;
   font-weight: 350;
-  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.95);
+  max-width: 520px;
 }
 
-.teacherImage {
-  width: min(100%, 420px);
+.missionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 28px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--landing-accent);
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 350;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.missionButton:hover {
+  opacity: 0.92;
+}
+
+/* Карточки «Что такое OKU» — иллюстрации по центру */
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(16px, 2vw, 28px);
+}
+
+.featureCard {
+  border: 1px solid var(--landing-stroke);
+  border-radius: var(--landing-radius);
+  background: #fff;
+  padding: 28px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  box-shadow: none;
+  transition: box-shadow 0.35s ease;
+}
+
+.featureCard:hover {
+  box-shadow: 0 12px 40px rgba(38, 38, 38, 0.06);
+}
+
+.featureCardIcon {
+  width: auto;
+  height: 180px;
+  max-width: 100%;
   object-fit: contain;
-  align-self: end;
-  justify-self: end;
-  margin-bottom: -30px;
+  object-position: center;
+  align-self: center;
+  transform-origin: center center;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.footer {
-  margin-top: 80px;
-  padding: 0 24px 56px;
-  text-align: center;
-  color: #737373;
-  font-size: 12px;
-  line-height: 1.2;
+@media (hover: hover) and (pointer: fine) {
+  .featureCard:hover .featureCardIcon {
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .featureCard {
+    transition: none;
+  }
+
+  .featureCard:hover {
+    box-shadow: none;
+  }
+
+  .featureCardIcon {
+    transition: none;
+  }
+}
+
+.featureLabel {
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 350;
+  color: var(--landing-gray);
+}
+
+.featureCardTitle {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 450;
+  color: var(--landing-ink);
+}
+
+.featureCardText {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 350;
+  color: var(--landing-gray);
+}
+
+/* Это актуально */
+.relevanceRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(24px, 4vw, 48px);
+  align-items: center;
+}
+
+.relevanceText {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.relevanceLead {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 350;
+  color: var(--landing-gray);
+}
+
+.relevanceHighlight {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 350;
+  color: var(--landing-accent);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 200px));
+  gap: 12px;
+  justify-content: end;
+  width: 100%;
+  max-width: 412px;
+  justify-self: end;
+}
+
+.statCard,
+.statCardAccent {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 200px;
+  min-height: 72px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  border-radius: 16px;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+
+.statCard {
+  background: #fff;
+  border: 1px solid var(--landing-stroke);
+  box-shadow: none;
+}
+
+.statCardAccent {
+  background: var(--landing-accent);
+  color: #fff;
+  border: none;
+}
+
+.statIconImg {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.statCardAccent .statIconImg {
+  filter: brightness(0) invert(1);
+}
+
+.statTextCol {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.statLabel {
+  font-size: 14px;
+  line-height: 1;
   font-weight: 350;
 }
 
+.statValue {
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 450;
+}
+
+.statCard .statLabel {
+  color: var(--landing-gray);
+}
+
+.statCard .statValue {
+  color: var(--landing-accent);
+}
+
+.statCardAccent .statLabel {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.statCardAccent .statValue {
+  color: #fff;
+}
+
+/* FAQ */
+.faqList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: fit-content;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.faqCard {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(38, 38, 38, 0.06);
+  padding: 24px 32px;
+}
+
+.faqQuestionBtn {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.faqQuestion {
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 450;
+  color: var(--landing-ink);
+  flex: 1;
+  min-width: 0;
+}
+
+.faqChevronIcon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  color: var(--landing-accent);
+  transition: transform 0.3s ease-in-out;
+}
+
+.faqChevronIconOpen {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  color: var(--landing-accent);
+  transition: transform 0.3s ease-in-out;
+  transform: rotate(180deg);
+}
+
+.faqAnswerPanel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease-in-out;
+}
+
+.faqAnswerPanelOpen {
+  grid-template-rows: 1fr;
+}
+
+.faqAnswerMeasure {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.faqAnswerBody {
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.faqAnswer {
+  margin: 0;
+  font-size: 16px;
+  text-align: left;
+  line-height: 1;
+  font-weight: 350;
+  color: rgba(98, 98, 98, 1);
+}
+
+.bottomCta {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.ctaSolid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 32px;
+  border-radius: 8px;
+  background: var(--landing-accent);
+  color: rgba(255, 255, 255, 1);
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 350;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.ctaSolid:hover {
+  opacity: 0.92;
+}
+
 @media (max-width: 1024px) {
-  .heroBrand {
-    font-size: 80px;
+  .main {
+    gap: 80px;
+    padding-bottom: 80px;
   }
 
-  .displayTitle,
-  .displayTitleColor,
-  .teacherTitle {
-    font-size: 56px;
+  .missionCard {
+    grid-template-columns: 1fr;
+    text-align: center;
   }
 
-  .goalCard {
-    grid-template-columns: 0.9fr 1.1fr;
+  .missionBody {
+    align-items: center;
   }
 
-  .featureRow,
-  .featureRowReverse {
-    grid-template-columns: minmax(0, 1fr) 260px;
+  .featureGrid {
+    grid-template-columns: 1fr;
   }
 
-  .teacherCard {
-    grid-template-columns: minmax(0, 1fr) 280px;
-    min-height: 340px;
-    padding: 34px 34px;
+  .featureCardIcon {
+    height: 160px;
+    align-self: center;
+  }
+
+  .relevanceRow {
+    grid-template-columns: 1fr;
+  }
+
+  .relevanceText {
+    order: 0;
+  }
+
+  .statsGrid {
+    order: 1;
+    justify-self: stretch;
+    max-width: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .statCard,
+  .statCardAccent {
+    max-width: none;
   }
 }
 
-@media (max-width: 760px) {
-  .main {
-    padding: 0 16px;
-    gap: 80px;
-  }
-
-  .hero {
-    min-height: 62svh;
-    gap: 10px;
-  }
-
+@media (max-width: 640px) {
   .heroLogo {
-    width: 128px;
-    height: 128px;
+    width: 120px;
+    height: 120px;
   }
 
-  .heroBrand {
-    font-size: 64px;
+  .sectionHeadingCenter,
+  .sectionHeading {
+    font-size: 28px;
   }
 
-  .heroText {
-    font-size: 14px;
-    line-height: 1.25;
+  .relevanceLead,
+  .relevanceHighlight {
+    font-size: 18px;
   }
 
-  .heroActions {
-    gap: 6px;
+  .featureCardIcon {
+    height: 140px;
   }
 
-  .ctaPrimary {
-    width: 180px;
-    min-height: 34px;
-    font-size: 14px;
-  }
-
-  .section {
-    gap: 24px;
-  }
-
-  .sectionTitle {
-    font-size: 24px;
-  }
-
-  .sectionText {
-    font-size: 14px;
-    line-height: 1.25;
-  }
-
-  .goalCard,
-  .featureRow,
-  .featureRowReverse,
-  .teacherCard {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-
-  .goalCard {
-    min-height: unset;
-    padding: 22px 18px 24px;
-    text-align: center;
-  }
-
-  .goalBody,
-  .featureTextBlock,
-  .teacherBody {
-    justify-items: center;
-    text-align: center;
-  }
-
-  .goalImage,
-  .featureImage,
-  .teacherImage {
-    width: min(100%, 252px);
-    margin: 0;
-    justify-self: center;
-  }
-
-  .featureImage,
-  .teacherImage {
-    width: 160px;
-    height: 160px;
-  }
-
-  .featureImage {
-    order: -1;
-  }
-
-  .displayTitle,
-  .displayTitleColor,
-  .teacherTitle {
-    font-size: 24px;
-    line-height: 1.06;
-    letter-spacing: -0.01em;
-  }
-
-  .displayTextOnColor,
-  .featureText {
-    font-size: 14px;
-    line-height: 1.2;
-    max-width: 100%;
-  }
-
-  .modesGrid {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-
-  .modeIcon {
-    width: 40px;
-    height: 40px;
-  }
-
-  .modeTitle {
-    font-size: 16px;
-  }
-
-  .modeText {
-    font-size: 14px;
-    line-height: 1.22;
-  }
-
-  .teacherTags {
-    justify-content: center;
-    max-width: 100%;
-  }
-
-  .teacherTag {
-    font-size: 14px;
-    padding: 9px 16px;
-    max-width: 100%;
-    white-space: normal;
-  }
-
-  .teacherImage {
-    order: -1;
-  }
-
-  .footer {
-    margin-top: 80px;
-    padding: 0 24px 44px;
-    font-size: 12px;
+  .statValue {
+    font-size: 20px;
   }
 }

@@ -1,5 +1,14 @@
 import {
   AuthResponse,
+  InstitutionAdminBootstrapInviteResponse,
+  InstitutionGroup,
+  InstitutionGroupDetails,
+  InstitutionListItem,
+  InstitutionMember,
+  ReviewDetails,
+  ReviewQueueItem,
+  SuperadminInstitutionDetails,
+  SuperadminInstitutionListResponse,
   GroupInviteAcceptResponse,
   GroupInvitePreview,
   GroupAssignedTest,
@@ -10,7 +19,11 @@ import {
   TeacherCustomMaterialGenerateResponse,
   TeacherCustomMaterialParseResponse,
   TeacherCustomQuestionInput,
+  TeacherApplication,
+  TeacherApplicationDecisionAction,
+  TeacherAssignApprovedTestResponse,
   TeacherCustomTestResultsResponse,
+  TeacherSubmitReviewResponse,
   TeacherCustomTest,
   TeacherCustomTestDetails,
   TeacherGroup,
@@ -580,7 +593,6 @@ export function register(body: {
   password: string;
   email_verification_code: string;
   role: "student" | "teacher";
-  admin_key?: string | null;
   preferred_language: "RU" | "KZ";
   education_level?: "school" | "college" | "university" | null;
   direction?: string | null;
@@ -599,8 +611,42 @@ export function sendRegisterCode(body: { email: string }) {
   });
 }
 
+export function checkUsernameAvailable(username: string) {
+  const q = encodeURIComponent(username.trim());
+  return apiRequest<{ available: boolean; reason?: "invalid" | "taken" | null }>(
+    `/auth/register/username-available?username=${q}`,
+    { method: "GET" },
+  );
+}
+
+export function checkInstitutionJoinCode(code: string) {
+  const q = encodeURIComponent(code.trim());
+  return apiRequest<{ valid: boolean; institution_id?: number; name?: string }>(
+    `/auth/register/institution-code?code=${q}`,
+    { method: "GET" },
+  );
+}
+
 export function login(body: { email: string; password: string; remember_me?: boolean }) {
   return apiRequest<AuthResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function requestPasswordReset(body: { email: string }) {
+  return apiRequest<{ message: string }>("/auth/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function confirmPasswordReset(body: {
+  token: string;
+  new_password: string;
+  confirm_password: string;
+}) {
+  return apiRequest<{ message: string }>("/auth/password-reset/confirm", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -1000,6 +1046,298 @@ export function createTeacherCustomTest(
     body: JSON.stringify(body),
   }, token).then((payload) => {
     invalidateTeacherCache({ clearCustomTests: true });
+    return payload;
+  });
+}
+
+export function updateTeacherCustomTest(
+  token: string,
+  customTestId: number,
+  body: {
+    title: string;
+    duration_minutes: number;
+    warning_limit: number;
+    due_date?: string | null;
+    group_ids: number[];
+    questions: TeacherCustomQuestionInput[];
+  },
+) {
+  return apiRequest<TeacherCustomTestDetails>(`/teacher/custom-tests/${customTestId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  }, token).then((payload) => {
+    invalidateTeacherCache({ clearCustomTests: true });
+    return payload;
+  });
+}
+
+export function submitTeacherCustomTestForReview(token: string, customTestId: number) {
+  return apiRequest<TeacherSubmitReviewResponse>(`/teacher/custom-tests/${customTestId}/submit-review`, {
+    method: "POST",
+  }, token).then((payload) => {
+    invalidateTeacherCache({ clearCustomTests: true });
+    return payload;
+  });
+}
+
+export function assignTeacherCustomTestToGroups(
+  token: string,
+  customTestId: number,
+  groupIds: number[],
+) {
+  return apiRequest<TeacherAssignApprovedTestResponse>(`/teacher/custom-tests/${customTestId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ group_ids: groupIds }),
+  }, token).then((payload) => {
+    invalidateTeacherCache({ clearCustomTests: true, clearAllGroups: true });
+    invalidateStudentCaches();
+    return payload;
+  });
+}
+
+export function createTeacherApplication(
+  token: string,
+  body: {
+    institution_id?: number;
+    institution_name?: string;
+    full_name: string;
+    email: string;
+    subject?: string;
+    position?: string;
+    additional_info?: string;
+  },
+) {
+  return apiRequest<TeacherApplication>("/teacher-applications", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }, token);
+}
+
+export function getMyTeacherApplications(token: string) {
+  return apiRequest<TeacherApplication[]>("/teacher-applications/me", {}, token);
+}
+
+export function getAdminInstitutions(token: string) {
+  return apiRequest<InstitutionListItem[]>("/institution-admin/institutions", {}, token);
+}
+
+export function getInstitutionTeacherApplications(
+  token: string,
+  institutionId: number,
+  statusFilter?: "pending" | "approved" | "rejected" | "suspended" | "revoked",
+) {
+  const params = new URLSearchParams();
+  if (statusFilter) {
+    params.set("status_filter", statusFilter);
+  }
+  const suffix = params.toString();
+  return apiRequest<TeacherApplication[]>(
+    `/institution-admin/institutions/${institutionId}/teacher-applications${suffix ? `?${suffix}` : ""}`,
+    {},
+    token,
+  );
+}
+
+export function decideInstitutionTeacherApplication(
+  token: string,
+  institutionId: number,
+  applicationId: number,
+  body: {
+    action: TeacherApplicationDecisionAction;
+    comment?: string;
+  },
+) {
+  return apiRequest<TeacherApplication>(
+    `/institution-admin/institutions/${institutionId}/teacher-applications/${applicationId}/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+    token,
+  );
+}
+
+export function getInstitutionStaff(token: string, institutionId: number) {
+  return apiRequest<InstitutionMember[]>(
+    `/institution-admin/institutions/${institutionId}/staff`,
+    {},
+    token,
+  );
+}
+
+export function assignInstitutionMethodist(
+  token: string,
+  institutionId: number,
+  userId: number,
+  makePrimary = false,
+) {
+  return apiRequest<InstitutionMember>(
+    `/institution-admin/institutions/${institutionId}/methodists`,
+    {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, make_primary: makePrimary }),
+    },
+    token,
+  );
+}
+
+export function getInstitutionGroups(token: string, institutionId: number) {
+  return apiRequest<InstitutionGroup[]>(
+    `/institution-admin/institutions/${institutionId}/groups`,
+    {},
+    token,
+  );
+}
+
+export function createInstitutionGroup(
+  token: string,
+  institutionId: number,
+  name: string,
+) {
+  return apiRequest<InstitutionGroup>(
+    `/institution-admin/institutions/${institutionId}/groups`,
+    {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    },
+    token,
+  );
+}
+
+export function getInstitutionGroupDetails(
+  token: string,
+  institutionId: number,
+  groupId: number,
+) {
+  return apiRequest<InstitutionGroupDetails>(
+    `/institution-admin/institutions/${institutionId}/groups/${groupId}`,
+    {},
+    token,
+  );
+}
+
+export function assignTeacherToInstitutionGroup(
+  token: string,
+  institutionId: number,
+  groupId: number,
+  teacherMembershipId: number,
+) {
+  return apiRequest<InstitutionGroup>(
+    `/institution-admin/institutions/${institutionId}/groups/${groupId}/teachers`,
+    {
+      method: "POST",
+      body: JSON.stringify({ teacher_membership_id: teacherMembershipId }),
+    },
+    token,
+  );
+}
+
+export function addStudentToInstitutionGroup(
+  token: string,
+  institutionId: number,
+  groupId: number,
+  studentUserId: number,
+) {
+  return apiRequest<InstitutionGroupDetails>(
+    `/institution-admin/institutions/${institutionId}/groups/${groupId}/students`,
+    {
+      method: "POST",
+      body: JSON.stringify({ student_user_id: studentUserId }),
+    },
+    token,
+  );
+}
+
+export function getMethodistInstitutions(token: string) {
+  return apiRequest<InstitutionListItem[]>("/methodist/institutions", {}, token);
+}
+
+export function getSuperadminInstitutions(token: string) {
+  return apiRequest<SuperadminInstitutionListResponse>("/superadmin/institutions", {}, token);
+}
+
+export function createSuperadminInstitution(token: string, payload: { name: string }) {
+  return apiRequest<SuperadminInstitutionDetails>(
+    "/superadmin/institutions",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function getSuperadminInstitution(token: string, institutionId: number) {
+  return apiRequest<SuperadminInstitutionDetails>(`/superadmin/institutions/${institutionId}`, {}, token);
+}
+
+export function createInstitutionAdminBootstrapInvite(
+  token: string,
+  institutionId: number,
+  payload: { email: string; expires_in_hours?: number; note?: string },
+) {
+  return apiRequest<InstitutionAdminBootstrapInviteResponse>(
+    `/superadmin/institutions/${institutionId}/bootstrap-invites`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export function acceptInstitutionAdminBootstrap(payload: {
+  token: string;
+  email: string;
+  full_name: string;
+  username: string;
+  password: string;
+}) {
+  return apiRequest<AuthResponse>("/auth/bootstrap/institution-admin/accept", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getMethodistReviewQueue(token: string, institutionId: number) {
+  return apiRequest<ReviewQueueItem[]>(
+    `/methodist/institutions/${institutionId}/reviews`,
+    {},
+    token,
+  );
+}
+
+export function getMethodistReviewDetails(
+  token: string,
+  institutionId: number,
+  testId: number,
+) {
+  return apiRequest<ReviewDetails>(
+    `/methodist/institutions/${institutionId}/reviews/${testId}`,
+    {},
+    token,
+  );
+}
+
+export function submitMethodistReviewDecision(
+  token: string,
+  institutionId: number,
+  testId: number,
+  body: {
+    status: "approved" | "rejected" | "needs_revision";
+    comment?: string;
+  },
+) {
+  return apiRequest<TeacherSubmitReviewResponse>(
+    `/methodist/institutions/${institutionId}/reviews/${testId}/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+    token,
+  ).then((payload) => {
+    invalidateTeacherCache({ clearCustomTests: true, clearAllGroups: true });
+    invalidateStudentCaches();
     return payload;
   });
 }

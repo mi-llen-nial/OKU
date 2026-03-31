@@ -139,6 +139,99 @@
   gap: 14px;
 }
 
+.statusRow {
+  display: grid;
+  gap: 8px;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  border-radius: 999px;
+  border: 1px solid #e3e1ff;
+  background: #f7f6ff;
+  color: #5f58ed;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 6px 10px;
+}
+
+.status_submitted_for_review,
+.status_in_review {
+  color: #836d00;
+  border-color: #f2e4a7;
+  background: #fff8dc;
+}
+
+.status_needs_revision {
+  color: #a84f00;
+  border-color: #ffd6b5;
+  background: #fff1e6;
+}
+
+.status_rejected {
+  color: #b62231;
+  border-color: #ffcad1;
+  background: #fff0f2;
+}
+
+.status_approved {
+  color: #0f7a3b;
+  border-color: #c0eecf;
+  background: #eefdf3;
+}
+
+.status_archived {
+  color: #5c5c5c;
+  border-color: #d9d9d9;
+  background: #f7f7f7;
+}
+
+.statusComment {
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 350;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workflowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workflowButton,
+.workflowButtonSecondary {
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.workflowButton {
+  background: #ecebff;
+  color: #5e58ed;
+}
+
+.workflowButtonSecondary {
+  background: #f3f8ff;
+  color: #3d5cdd;
+}
+
+.workflowButton:disabled,
+.workflowButtonSecondary:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .resultsButton {
   width: 100%;
   height: 44px;
@@ -237,6 +330,10 @@
   .subtitle,
   .error {
     font-size: 14px;
+  }
+
+  .statusComment {
+    font-size: 12px;
   }
 
   .cardActions {

@@ -1,4 +1,4 @@
-export type UserRole = "student" | "teacher";
+export type UserRole = "student" | "teacher" | "methodist" | "institution_admin" | "superadmin";
 export type InvitationStatus = "pending" | "accepted" | "declined";
 export type Difficulty = "easy" | "medium" | "hard";
 export type Language = "RU" | "KZ";
@@ -277,6 +277,12 @@ export interface TeacherCustomTest {
   due_date?: string | null;
   questions_count: number;
   groups: TeacherCustomGroupBrief[];
+  moderation_status?: "draft" | "submitted_for_review" | "in_review" | "needs_revision" | "approved" | "rejected" | "archived";
+  moderation_comment?: string | null;
+  submitted_for_review_at?: string | null;
+  reviewed_at?: string | null;
+  current_draft_version?: number;
+  approved_version?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -384,4 +390,162 @@ export interface ProfileData {
   group_id?: number | null;
   group_name?: string | null;
   invitations: ProfileInvitation[];
+}
+
+export interface TeacherApplication {
+  id: number;
+  applicant_user_id: number;
+  institution: {
+    id: number;
+    name: string;
+  };
+  full_name: string;
+  email: string;
+  subject?: string | null;
+  position?: string | null;
+  additional_info?: string | null;
+  status: "pending" | "approved" | "rejected" | "suspended" | "revoked";
+  reviewer_comment?: string | null;
+  created_at: string;
+  decided_at?: string | null;
+}
+
+export type InstitutionMembershipRole = "student" | "teacher" | "methodist" | "institution_admin";
+export type InstitutionMembershipStatus = "pending" | "active" | "suspended" | "revoked";
+export type TeacherApplicationDecisionAction = "approve" | "reject" | "suspend" | "revoke";
+export type TestModerationStatus =
+  | "draft"
+  | "submitted_for_review"
+  | "in_review"
+  | "needs_revision"
+  | "approved"
+  | "rejected"
+  | "archived";
+
+export interface InstitutionListItem {
+  id: number;
+  name: string;
+  role: InstitutionMembershipRole;
+  status: InstitutionMembershipStatus;
+  is_primary: boolean;
+}
+
+export interface SuperadminInstitutionListItem {
+  id: number;
+  name: string;
+  normalized_name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface SuperadminInstitutionDetails extends SuperadminInstitutionListItem {
+  created_by_user_id?: number | null;
+}
+
+export interface SuperadminInstitutionListResponse {
+  institutions: SuperadminInstitutionListItem[];
+}
+
+export interface InstitutionAdminBootstrapInviteResponse {
+  id: number;
+  institution_id: number;
+  email: string;
+  token: string;
+  expires_at: string;
+  created_at: string;
+  note?: string | null;
+}
+
+export interface InstitutionMember {
+  id: number;
+  user_id: number;
+  institution_id: number;
+  role: InstitutionMembershipRole;
+  status: InstitutionMembershipStatus;
+  is_primary: boolean;
+  full_name?: string | null;
+  username: string;
+  email: string;
+  created_at: string;
+  updated_at: string;
+  roles: InstitutionMembershipRole[];
+  statuses: InstitutionMembershipStatus[];
+  teacher_membership_id?: number | null;
+}
+
+export interface InstitutionGroupTeacher {
+  membership_id: number;
+  user_id: number;
+  full_name?: string | null;
+  username: string;
+  email: string;
+}
+
+export interface InstitutionGroupStudent {
+  user_id: number;
+  username: string;
+  full_name?: string | null;
+  email: string;
+}
+
+export interface InstitutionGroup {
+  id: number;
+  name: string;
+  institution_id: number;
+  members_count: number;
+  teachers: InstitutionGroupTeacher[];
+}
+
+export interface InstitutionGroupDetails extends InstitutionGroup {
+  students: InstitutionGroupStudent[];
+}
+
+export interface ReviewQueueItem {
+  test_id: number;
+  title: string;
+  teacher_user_id: number;
+  teacher_name: string;
+  moderation_status: TestModerationStatus;
+  submitted_for_review_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  questions_count: number;
+}
+
+export interface ReviewDetailsQuestion {
+  id: number;
+  order_index: number;
+  prompt: string;
+  question_type: string;
+}
+
+export interface ReviewDetails {
+  test_id: number;
+  institution_id: number;
+  title: string;
+  teacher_user_id: number;
+  teacher_name: string;
+  warning_limit: number;
+  duration_minutes: number;
+  due_date?: string | null;
+  moderation_status: TestModerationStatus;
+  moderation_comment?: string | null;
+  current_draft_version: number;
+  approved_version?: number | null;
+  submitted_for_review_at?: string | null;
+  reviewed_at?: string | null;
+  questions: ReviewDetailsQuestion[];
+}
+
+export interface TeacherSubmitReviewResponse {
+  test_id: number;
+  status: TestModerationStatus;
+  current_draft_version: number;
+  submitted_for_review_at: string;
+}
+
+export interface TeacherAssignApprovedTestResponse {
+  test_id: number;
+  status: TestModerationStatus;
+  assigned_group_ids: number[];
 }

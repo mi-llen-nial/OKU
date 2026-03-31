@@ -1,0 +1,192 @@
+.page {
+  --sp-ink: #262626;
+  --sp-gray: #626262;
+  --sp-accent: #6a63f5;
+  --sp-stroke: #e2e2ec;
+
+  letter-spacing: -0.03em;
+  line-height: 1;
+  background: #fff;
+  color: var(--sp-ink);
+  min-height: 100vh;
+}
+
+.main {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 0 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 120px;
+}
+
+.hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 80px 0 80px;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: 36px;
+  line-height: 1.1;
+  font-weight: 600;
+}
+
+.heroSubtitle {
+  margin: 0;
+  font-size: 24px;
+  line-height: 24px;
+  font-weight: 350;
+  color: var(--sp-gray);
+}
+
+.diagramSection {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.diagramDesktop {
+  width: min(100%, 1128px);
+  height: auto;
+  display: block;
+}
+
+.diagramMobile {
+  display: none;
+  width: min(100%, 420px);
+  height: auto;
+}
+
+.processSection {
+  width: 100%;
+}
+
+.processTitle {
+  margin: 0 0 24px;
+  font-size: 36px;
+  line-height: 1.1;
+  font-weight: 600;
+  color: var(--sp-ink);
+  text-align: center;
+}
+
+.processRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 40px;
+  width: 100%;
+}
+
+.processCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 560px;
+}
+
+.processSubtitle {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 450;
+  color: var(--sp-ink);
+}
+
+.processBody {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 350;
+  color: var(--sp-gray);
+}
+
+.requestBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 36px;
+  border-radius: 8px;
+  background: var(--sp-accent);
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 350;
+  line-height: 1;
+  transition: opacity 0.15s ease;
+  width: fit-content;
+}
+
+.requestBtn:hover {
+  opacity: 0.92;
+}
+
+.processIllustration {
+  flex: 0 0 auto;
+  width: 230px;
+  height: 230px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.processIllustration img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.faqSection {
+  width: 100%;
+  text-align: center;
+}
+
+@media (max-width: 1024px) {
+  .main {
+    gap: 80px;
+  }
+
+  .processRow {
+    gap: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .main {
+    gap: 40px;
+  }
+
+  .hero {
+    padding: 96px 0 56px;
+  }
+
+  .diagramDesktop {
+    display: none;
+  }
+
+  .diagramMobile {
+    display: block;
+  }
+
+  .processRow {
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .processIllustration {
+    width: 150px;
+    height: 150px;
+    margin: 0 auto;
+  }
+
+  .requestBtn {
+    width: 100%;
+  }
+}
+

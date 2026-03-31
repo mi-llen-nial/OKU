@@ -1,0 +1,514 @@
+/* Страница «Для учеников» — публичный маркетинг */
+.page {
+  --sp-ink: #262626;
+  --sp-gray: #626262;
+  --sp-accent: #6a63f5;
+  --sp-stroke: #e2e2ec;
+
+  letter-spacing: -0.03em;
+  line-height: 1;
+
+  /* Явный max-width как на главной странице */
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── Hero + предметы ── */
+.hero {
+  position: relative;
+  padding: 80px 0 80px;
+  /* Иначе full-bleed .scrollBand обрежется по padding .main */
+  overflow-x: visible;
+  overflow-y: visible;
+}
+
+.heroTitle {
+  margin: 0 0 4px;
+  text-align: center;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 44px;
+  color: var(--sp-ink);
+}
+
+.heroSubtitle {
+  margin: 0;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 450;
+  line-height: 32px;
+  color: var(--sp-gray);
+}
+
+/* Ленты до краёв viewport (компенсация горизонтального padding PublicSiteLayout) */
+.scrollBand {
+  position: relative;
+  margin-top: 32px;
+  padding: 0 0 8px;
+  width: calc(100% + 2 * var(--public-page-pad-x, 16px));
+  margin-left: calc(-1 * var(--public-page-pad-x, 16px));
+  margin-right: calc(-1 * var(--public-page-pad-x, 16px));
+  box-sizing: border-box;
+}
+
+.scrollFadeLeft,
+.scrollFadeRight {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: min(180px, 18vw);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.scrollFadeLeft {
+  left: 0;
+  background: linear-gradient(90deg, #fff 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.scrollFadeRight {
+  right: 0;
+  background: linear-gradient(270deg, #fff 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.marqueeStack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.marqueeStackMobile {
+  display: none;
+}
+
+.marqueeRow {
+  width: 100%;
+}
+
+.marqueeViewport {
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+}
+
+.marqueeTrack {
+  display: flex;
+  flex-direction: row;
+  width: max-content;
+  will-change: transform;
+}
+
+.marqueeTrackLeft {
+  animation: student-marquee-left 200s linear infinite;
+}
+
+.marqueeTrackRight {
+  animation: student-marquee-right 200s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marqueeTrackLeft,
+  .marqueeTrackRight {
+    animation: none;
+  }
+}
+
+@keyframes student-marquee-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes student-marquee-right {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.marqueeGroup {
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  gap: 12px;
+  padding-right: 12px;
+}
+
+/* Готовые SVG-карточки предметов из illustrations (без доп. текста в вёрстке) */
+.subjectMarqueeImg {
+  flex-shrink: 0;
+  width: auto;
+  height: 96px;
+  display: block;
+  object-fit: contain;
+}
+
+/* ── Современное тестирование ── */
+.section {
+  padding: 80px 0;
+}
+
+.sectionInner {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.sectionTitle {
+  margin: 0 0 32px;
+  text-align: center;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 44px;
+  color: var(--sp-ink);
+}
+
+.block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(24px, 4vw, 48px);
+  margin-bottom: 80px;
+}
+
+.block:last-child {
+  margin-bottom: 0;
+}
+
+.blockText {
+  flex: 1;
+  min-width: 0;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.blockHeading {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 44px;
+  color: var(--sp-accent);
+}
+
+.blockHeadingSemibold {
+  font-weight: 550;
+}
+
+.blockBody {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 350;
+  line-height: 24px;
+  color: var(--sp-gray);
+}
+
+.levelRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.levelRowEnt .levelCard {
+  max-width: 320px;
+}
+
+.levelCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: fit-content;
+  max-height: 80px;
+  padding: 12px 16px 12px 12px;
+  border-radius: 12px;
+  background: var(--sp-accent);
+  color: #fff;
+  flex: 1 1 200px;
+  max-width: 320px;
+}
+
+.levelIcon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.levelIconEmbedded {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.levelIconWhiteBox {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.levelIconWhiteBoxImg {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.levelText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.levelTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.2;
+}
+
+.levelSubtitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 350;
+  line-height: 1.2;
+  opacity: 0.92;
+}
+
+.illustration {
+  flex-shrink: 0;
+  width: 320px;
+  height: 320px;
+  position: relative;
+}
+
+.illustration img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .section .block:hover .illustration img {
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .illustration img {
+    transition: none;
+  }
+
+  .section .block:hover .illustration img {
+    transform: none;
+  }
+}
+
+/* ── Персонализация ── */
+.personalSection {
+  padding: 80px 0 120px;
+}
+
+.personalHeading {
+  margin: 0 0 80px;
+  text-align: center;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 44px;
+  color: var(--sp-ink);
+}
+
+.personalRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(24px, 4vw, 48px);
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.personalCopy {
+  flex: 1;
+  min-width: 0;
+  max-width: 786px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.personalLabel {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 450;
+  line-height: 20px;
+  color: var(--sp-ink);
+}
+
+.personalLead {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 350;
+  line-height: 16px;
+  color: var(--sp-gray);
+}
+
+.cta {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 36px;
+  border-radius: 8px;
+  background: var(--sp-accent);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 350;
+  line-height: 16px;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.cta:hover {
+  opacity: 0.92;
+}
+
+.sphereWrap {
+  flex-shrink: 0;
+  width: min(100%, 320px);
+  max-width: 320px;
+  aspect-ratio: 267 / 180;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sphereImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+@media (max-width: 900px) {
+  .block {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .illustration {
+    width: min(100%, 280px);
+    height: 240px;
+    margin: 0 auto;
+  }
+
+  .personalRow {
+    flex-direction: column;
+  }
+
+  .sphereWrap {
+    margin: 0 auto;
+  }
+
+  .cta {
+    align-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Первый блок «Современное тестирование»: сначала иллюстрация, затем текст */
+  .blockSubjects .illustration {
+    order: -1;
+  }
+
+  .levelRowSchoolLevels {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .levelRowSchoolLevels .levelCard {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero {
+    padding-top: 96px;
+  }
+
+  .heroTitle {
+    font-size: 28px;
+    line-height: 34px;
+  }
+
+  .heroSubtitle {
+    font-size: 18px;
+    line-height: 26px;
+  }
+
+  .sectionTitle,
+  .personalHeading,
+  .blockHeading {
+    font-size: 28px;
+    line-height: 34px;
+  }
+
+  .scrollFadeLeft,
+  .scrollFadeRight {
+    width: 48px;
+  }
+
+  .subjectMarqueeImg {
+    height: 80px;
+  }
+
+  .marqueeStack {
+    display: none;
+  }
+
+  .marqueeStackMobile {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Две плашки школ: две строки, не два столбца */
+  .levelRowSchoolLevels {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .levelRowSchoolLevels .levelCard {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
+  }
+
+  /* ЕНТ: на всю ширину только на узком экране */
+  .levelRowEnt .levelCard {
+    max-width: none;
+    width: 100%;
+  }
+}

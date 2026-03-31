@@ -19,6 +19,10 @@ from app.models import (
     DifficultyLevel,
     Group,
     GroupMembership,
+    GroupTeacherAssignment,
+    InstitutionMembership,
+    InstitutionMembershipRole,
+    InstitutionMembershipStatus,
     PreferredLanguage,
     Question,
     QuestionType,
@@ -29,6 +33,8 @@ from app.models import (
     StudentQuestionCoverage,
     TeacherAuthoredTest,
     TeacherAuthoredTestGroup,
+    TestAssignment,
+    TestModerationStatus,
     TestMode,
     TestSession,
     StudentProfile,
@@ -243,16 +249,53 @@ def generate_test_from_custom_template(
         select(TeacherAuthoredTest)
         .options(
             selectinload(TeacherAuthoredTest.questions),
+            selectinload(TeacherAuthoredTest.assignments),
+        )
+        .join(TestAssignment, TestAssignment.test_id == TeacherAuthoredTest.id)
+        .where(
+            TeacherAuthoredTest.id == custom_test_id,
+            TestAssignment.group_id.in_(student_group_ids),
+            TeacherAuthoredTest.moderation_status == TestModerationStatus.approved,
+        )
+    ).unique().scalar_one_or_none()
+
+    assignment_group_id: int | None = None
+    if custom_test is not None:
+        assignment_group_id = next(
+            (
+                int(link.group_id)
+                for link in custom_test.assignments
+                if int(link.group_id) in student_group_ids
+            ),
+            None,
+        )
+
+    if custom_test is None:
+        custom_test = db.execute(
+        select(TeacherAuthoredTest)
+        .options(
+            selectinload(TeacherAuthoredTest.questions),
             selectinload(TeacherAuthoredTest.group_links),
         )
         .join(TeacherAuthoredTestGroup, TeacherAuthoredTestGroup.test_id == TeacherAuthoredTest.id)
         .where(
             TeacherAuthoredTest.id == custom_test_id,
             TeacherAuthoredTestGroup.group_id.in_(student_group_ids),
+            TeacherAuthoredTest.institution_id.is_(None),
         )
-    ).unique().scalar_one_or_none()
+        ).unique().scalar_one_or_none()
     if not custom_test:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Групповой тест не найден")
+    if custom_test.institution_id is not None and custom_test.moderation_status != TestModerationStatus.approved:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Этот тест ещё не прошёл модерацию и недоступен для прохождения.",
+        )
+    if custom_test.institution_id is not None and assignment_group_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Этот тест не назначен вашей группе.",
+        )
     if not custom_test.questions:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="В выбранном тесте нет вопросов")
     if custom_test.due_date and custom_test.due_date < date.today():
@@ -260,14 +303,16 @@ def generate_test_from_custom_template(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Срок сдачи теста истёк.",
         )
-    assigned_group_id = next(
-        (
-            int(link.group_id)
-            for link in sorted(custom_test.group_links, key=lambda item: item.group_id)
-            if int(link.group_id) in student_group_ids
-        ),
-        student_group_ids[0],
-    )
+    assigned_group_id = assignment_group_id
+    if assigned_group_id is None:
+        assigned_group_id = next(
+            (
+                int(link.group_id)
+                for link in sorted(custom_test.group_links, key=lambda item: item.group_id)
+                if int(link.group_id) in student_group_ids
+            ),
+            student_group_ids[0],
+        )
 
     completed_group_tests = db.scalars(
         select(Test)
@@ -1502,17 +1547,42 @@ def _load_test(db: DBSession, test_id: int) -> Test:
 
 def _assert_access(db: DBSession, test: Test, user: User) -> None:
     if user.role == UserRole.teacher:
-        is_teacher_of_student = db.scalar(
+        teacher_membership_ids = db.scalars(
+            select(InstitutionMembership.id).where(
+                InstitutionMembership.user_id == int(user.id),
+                InstitutionMembership.role == InstitutionMembershipRole.teacher,
+                InstitutionMembership.status == InstitutionMembershipStatus.active,
+            )
+        ).all()
+
+        assigned_teacher_of_student = db.scalar(
             select(GroupMembership.id)
-            .join(GroupMembership.group)
+            .join(Group, Group.id == GroupMembership.group_id)
+            .join(GroupTeacherAssignment, GroupTeacherAssignment.group_id == Group.id)
             .where(
-                GroupMembership.student_id == test.student_id,
-                Group.teacher_id == user.id,
+                GroupMembership.student_id == int(test.student_id),
+                GroupTeacherAssignment.teacher_membership_id.in_(teacher_membership_ids or [-1]),
+                Group.institution_id.is_not(None),
             )
             .limit(1)
         )
-        if is_teacher_of_student:
+        if assigned_teacher_of_student:
             return
+
+        # Transitional fallback for legacy non-institution groups created before RBAC migration.
+        legacy_teacher_of_student = db.scalar(
+            select(GroupMembership.id)
+            .join(Group, Group.id == GroupMembership.group_id)
+            .where(
+                GroupMembership.student_id == int(test.student_id),
+                Group.teacher_id == int(user.id),
+                Group.institution_id.is_(None),
+            )
+            .limit(1)
+        )
+        if legacy_teacher_of_student:
+            return
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Недостаточно прав для доступа к этому тесту",

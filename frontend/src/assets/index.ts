@@ -1,5 +1,5 @@
 const ICONS_VERSION = "20260302-2";
-const ILLUSTRATIONS_VERSION = "20260301-2";
+const ILLUSTRATIONS_VERSION = "20260322-1";
 const LOGO_VERSION = "20260312-1";
 
 export const assetPaths = {
@@ -43,24 +43,54 @@ export const assetPaths = {
     warningDiamond: `/assets/icons/mynaui_danger-diamond-solid.svg?v=${ICONS_VERSION}`,
     schedule: `/assets/icons/uis_schedule.svg?v=${ICONS_VERSION}`,
     timer: `/assets/icons/mingcute_time-fill.svg?v=${ICONS_VERSION}`,
+    /** Списки с отметками (педагог, цены) */
+    checkFill: `/assets/icons/mingcute_check-fill.svg?v=${ICONS_VERSION}`,
     aiGenerate: `/assets/icons/octicon_north-star-16.svg?v=${ICONS_VERSION}`,
     attachFile: `/assets/icons/tabler_link.svg?v=${ICONS_VERSION}`,
     testCreated: `/assets/icons/icon-park-solid_inbox-success.svg?v=${ICONS_VERSION}`,
     testPassed: `/assets/icons/icon-park-solid_success.svg?v=${ICONS_VERSION}`,
+    /** Блок «Это актуально» на лендинге */
+    landingStatUsers: `/assets/icons/material-symbols_group-rounded.svg?v=${ICONS_VERSION}`,
+    /** «всего от 660 тг» — иконка «образование / выпускная шапочка» по макету */
+    landingStatPrice: `/assets/icons/material-symbols_history-edu-rounded.svg?v=${ICONS_VERSION}`,
+    landingStatEfficiency: `/assets/icons/akar-icons_statistic-up.svg?v=${ICONS_VERSION}`,
+    landingStatTests: `/assets/icons/healthicons_i-exam-multiple-choice.svg?v=${ICONS_VERSION}`,
+    /** Страница «Ученику»: средняя школа */
+    school: `/assets/icons/ic_round-school.svg?v=${ICONS_VERSION}`,
+    middleSchool: `/assets/icons/middle_school.svg?v=${ICONS_VERSION}`,
+    highSchool: `/assets/icons/high_school.svg?v=${ICONS_VERSION}`,
   },
   images: {
     parchment: "/assets/images/bg-parchment.svg",
     arcaneFrame: "/assets/images/arcane-frame.svg",
     qrOku: "/assets/images/t_me-KOMA_OKU_bot%201.png",
     qrFaq: "/assets/images/FAQ_bot.png",
+    /** Страница «Педагогу»: иллюстрации режимов (ручной / AI / файл) */
+    teachersModeManual: `/assets/images/with_hand.svg?v=${ICONS_VERSION}`,
+    teachersModeAi: `/assets/images/with_ai.svg?v=${ICONS_VERSION}`,
+    teachersModeFile: `/assets/images/with_file.svg?v=${ICONS_VERSION}`,
   },
   illustrations: {
     owl: `/assets/illustrations/illus-owl.svg?v=${ILLUSTRATIONS_VERSION}`,
     constellation: `/assets/illustrations/illus-constellation.svg?v=${ILLUSTRATIONS_VERSION}`,
+    /** Миссия: стопка книг */
     landingBooks: `/assets/illustrations/Untitled%201.png?v=${ILLUSTRATIONS_VERSION}`,
-    landingSubjects: `/assets/illustrations/iconsfsad%201.png?v=${ILLUSTRATIONS_VERSION}`,
-    landingPrep: `/assets/illustrations/gsfdkgsf%201.png?v=${ILLUSTRATIONS_VERSION}`,
-    landingTeacher: `/assets/illustrations/teacher%201.png?v=${ILLUSTRATIONS_VERSION}`,
+    /** «Что такое OKU»: ученик / преподаватель / учреждение (макет Figma) */
+    landingModernTest: `/assets/illustrations/modern_test.png?v=${ILLUSTRATIONS_VERSION}`,
+    landingMainTeacher: `/assets/illustrations/main_teacher.png?v=${ILLUSTRATIONS_VERSION}`,
+    landingMainOrg: `/assets/illustrations/main_org.png?v=${ILLUSTRATIONS_VERSION}`,
+    /** Страница «Ученику»: карточки предметов */
+    studentAlgebra: `/assets/illustrations/algebra.svg?v=${ILLUSTRATIONS_VERSION}`,
+    studentGeometry: `/assets/illustrations/geometry.svg?v=${ILLUSTRATIONS_VERSION}`,
+    studentPhysics: `/assets/illustrations/physics.svg?v=${ILLUSTRATIONS_VERSION}`,
+    studentBiology: `/assets/illustrations/bio.svg?v=${ILLUSTRATIONS_VERSION}`,
+    studentInformatics: `/assets/illustrations/computer.svg?v=${ILLUSTRATIONS_VERSION}`,
+    studentEnglish: `/assets/illustrations/english.svg?v=${ILLUSTRATIONS_VERSION}`,
+    studentHistory: `/assets/illustrations/history.svg?v=${ILLUSTRATIONS_VERSION}`,
+    /** «Общеобразовательные предметы» */
+    studentGeneralSubjects: `/assets/illustrations/iconsfsad%202.png?v=${ILLUSTRATIONS_VERSION}`,
+    /** «Персонализированное обучение» */
+    studentSphere: `/assets/illustrations/sphere.svg?v=${ILLUSTRATIONS_VERSION}`,
   },
   audio: {
     placeholder: "/assets/audio/.gitkeep",

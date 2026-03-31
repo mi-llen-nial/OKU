@@ -2,7 +2,8 @@ import type { MetadataRoute } from "next";
 
 import { absoluteUrl } from "@/src/config/site";
 
-const PUBLIC_ROUTES = ["/", "/login", "/register"] as const;
+/** Public marketing URLs (oku.com.kz). Auth and app live on app.oku.com.kz and are not indexed here. */
+const PUBLIC_ROUTES = ["/", "/students", "/teachers", "/institutions", "/about", "/price", "/user-agreement"] as const;
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
@@ -10,6 +11,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     url: absoluteUrl(route),
     lastModified: now,
     changeFrequency: route === "/" ? "weekly" : "monthly",
-    priority: route === "/" ? 1 : 0.6,
+    priority: route === "/" ? 1 : 0.7,
   }));
 }

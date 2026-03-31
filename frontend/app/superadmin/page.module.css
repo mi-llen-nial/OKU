@@ -1,0 +1,77 @@
+.page {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.muted {
+  opacity: 0.75;
+}
+
+.section {
+  background: var(--panel-base);
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-soft);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.card {
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: var(--panel-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inlineForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.inlineForm input,
+.inlineForm textarea {
+  flex: 1;
+  min-width: 220px;
+  border: 1px solid var(--line-color);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  background: transparent;
+  color: inherit;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.tokenBox {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-color);
+  border-radius: var(--radius-md);
+  background: transparent;
+  word-break: break-all;
+}
+

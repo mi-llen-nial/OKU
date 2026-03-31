@@ -1,3 +1,28 @@
+/* Назад на главную: иконка-шеврон; на светлой колонке — тёмный stroke, на фиолетовой — landing stroke */
+.authHomeLink {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  z-index: 200;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  margin: -8px;
+  text-decoration: none;
+  color: #626262;
+}
+
+.authHomeIcon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.authHomeLink:hover {
+  opacity: 0.85;
+}
+
 .authSplit {
   min-height: 100vh;
   display: grid;
@@ -83,6 +108,31 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
 
+/* Валидация после blur; при фокусе всегда стиль active */
+.inputValid {
+  border-color: #22c55e;
+  box-shadow: none;
+}
+
+.inputInvalid {
+  border-color: #f87171;
+  box-shadow: none;
+}
+
+.input.inputValid:focus,
+.input.inputInvalid:focus {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+.fieldHint {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.92);
+}
+
 .rememberRow {
   display: inline-flex;
   align-items: center;
@@ -100,6 +150,12 @@
   accent-color: #6a63f5;
   border: 1px solid #ffffff;
   background: #ffffff;
+}
+
+/* Чекбокс соглашения на регистрации */
+.termsRow input[type="checkbox"] {
+  border: none;
+  border-radius: 4px;
 }
 
 .primaryButton,
@@ -161,11 +217,253 @@
   text-decoration: underline;
 }
 
+.forgotRow {
+  margin-top: 6px;
+}
+
+.forgotLink {
+  color: #ffffff;
+  text-decoration: underline;
+  font-size: 14px;
+  font-weight: 350;
+}
+
 .codeInput {
   text-align: center;
   letter-spacing: 0.35em;
   font-weight: 500;
   padding-left: 24px;
+}
+
+/* Пошаговая регистрация */
+.registerWizardCard {
+  max-height: min(720px, calc(100dvh - 48px));
+  overflow-y: auto;
+  width: min(378px, 100%);
+  -webkit-overflow-scrolling: touch;
+}
+
+.registerRoleScreen {
+  width: min(378px, 100%);
+  margin-inline: auto;
+}
+
+.registerWizardHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+.registerBackChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  width: auto;
+  height: auto;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.registerBackChevron:hover {
+  background: transparent;
+}
+
+.registerBackChevronIcon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.registerBackChevron:hover .registerBackChevronIcon {
+  transform: scale(1.1);
+}
+
+.registerProgressTrack {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+.registerProgressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: #ffffff;
+  transition: width 0.22s ease;
+}
+
+.registerStepMeta {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.rolePickGrid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.rolePickCard {
+  position: relative;
+  display: block;
+  width: 378px;
+  max-width: 100%;
+  min-height: 130px;
+  height: auto;
+  box-sizing: border-box;
+  text-align: center;
+  border: none;
+  background: #ffffff;
+  color: #6a63f5;
+  border-radius: 12px;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow 0.25s ease;
+  box-shadow: 0 1px 10px rgba(0, 0, 0, 0.06);
+}
+
+.rolePickCard:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.rolePickCardInner {
+  position: relative;
+  width: 100%;
+  min-height: 130px;
+  padding: 12px 16px 14px;
+  box-sizing: border-box;
+}
+
+.rolePickIcon {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0;
+  transform: translateX(-50%);
+  transform-origin: center center;
+  transition:
+    transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    top 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rolePickIcon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.rolePickCard:hover .rolePickIcon {
+  top: 50%;
+  transform: translate(-50%, -50%) scale(2.05);
+}
+
+.rolePickText {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+  margin-top: 78px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  transition:
+    transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.35s ease;
+}
+
+.rolePickCard:hover .rolePickText {
+  transform: translateY(72px);
+  opacity: 0;
+}
+
+.rolePickTitle {
+  display: block;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 1.25;
+  color: #6a63f5;
+}
+
+.rolePickHint {
+  display: block;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.35;
+  margin: 0;
+  color: #6a63f5;
+  opacity: 0.92;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.registerStepFields {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  animation: registerStepIn 0.38s ease forwards;
+}
+
+@keyframes registerStepIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.registerActions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.registerTextarea {
+  min-height: 88px;
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.fieldHintOk {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: #bbf7d0;
 }
 
 @media (max-width: 960px) {
@@ -218,5 +516,9 @@
   .rememberRow input {
     width: 16px;
     height: 16px;
+  }
+
+  .authHomeLink {
+    color: #e2e2ec;
   }
 }

@@ -1,20 +1,30 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import {
   createTeacherCustomTest,
   generateTeacherCustomTestMaterial,
+  getTeacherCustomTest,
   getTeacherGroups,
   parseTeacherCustomTestFile,
+  updateTeacherCustomTest,
 } from "@/lib/api";
 import { getToken, getUser } from "@/lib/auth";
 import { tr, useUiLanguage } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-import { Difficulty, TeacherCustomMaterialQuestion, TeacherCustomQuestionInput, TeacherGroup } from "@/lib/types";
+import {
+  Difficulty,
+  TeacherCustomMaterialQuestion,
+  TeacherCustomQuestion,
+  TeacherCustomQuestionInput,
+  TeacherCustomTestDetails,
+  TeacherGroup,
+} from "@/lib/types";
 import { assetPaths } from "@/src/assets";
 import styles from "@/app/teacher/create-test/create-test.module.css";
 
@@ -158,6 +168,48 @@ function normalizeDraft(value: unknown): DraftState {
   };
 }
 
+function draftFromCustomTestDetails(details: TeacherCustomTestDetails): DraftState {
+  return {
+    title: details.title,
+    duration_minutes: details.duration_minutes,
+    warning_limit: details.warning_limit,
+    due_date: details.due_date || defaultDueDate(),
+    questions: details.questions.map((question: TeacherCustomQuestion, index: number): DraftQuestion => {
+      const answerType: AnswerType = question.answer_type === "free_text" ? "free_text" : "choice";
+      if (answerType === "free_text") {
+        return {
+          id: `edit-q-${question.id}-${index}`,
+          prompt: question.prompt || "",
+          answer_type: "free_text",
+          options: ["", "", "", ""],
+          correct_option_index: null,
+          sample_answer: question.sample_answer || "",
+          image_data_url: question.image_data_url || null,
+        };
+      }
+
+      const options = (question.options || []).map((item) => (item || "").trim()).filter(Boolean).slice(0, 8);
+      while (options.length < 4) {
+        options.push("");
+      }
+      const rawCorrectIndex = Number(question.correct_option_index ?? 0);
+      const correctOptionIndex = Number.isFinite(rawCorrectIndex) && rawCorrectIndex >= 0 && rawCorrectIndex < options.length
+        ? rawCorrectIndex
+        : 0;
+
+      return {
+        id: `edit-q-${question.id}-${index}`,
+        prompt: question.prompt || "",
+        answer_type: "choice",
+        options,
+        correct_option_index: correctOptionIndex,
+        sample_answer: "",
+        image_data_url: question.image_data_url || null,
+      };
+    }),
+  };
+}
+
 function buildPayloadQuestions(
   questions: DraftQuestion[],
   t: (ru: string, kz: string) => string,
@@ -242,9 +294,17 @@ function formatRuGroups(count: number): string {
   return "групп";
 }
 
-export default function TeacherCreateTestPage() {
+function TeacherCreateTestPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const uiLanguage = useUiLanguage();
   const t = (ru: string, kz: string) => tr(uiLanguage, ru, kz);
+  const editIdFromQuery = useMemo(() => {
+    const raw = searchParams.get("edit");
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
 
   const [draft, setDraft] = useState<DraftState>(createInitialDraft);
   const [createMode, setCreateMode] = useState<CreateMode>("manual");
@@ -256,11 +316,14 @@ export default function TeacherCreateTestPage() {
   const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null);
   const [parsingImportFile, setParsingImportFile] = useState(false);
   const [parsedImportFilename, setParsedImportFilename] = useState<string>("");
+  const [editingTestId, setEditingTestId] = useState<number | null>(editIdFromQuery);
+  const [loadingEditDraft, setLoadingEditDraft] = useState(false);
   const [groups, setGroups] = useState<TeacherGroup[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [createdSuccessModalOpen, setCreatedSuccessModalOpen] = useState(false);
+  const [successModalMode, setSuccessModalMode] = useState<"create" | "update">("create");
 
   const totalQuestions = draft.questions.length;
 
@@ -283,10 +346,14 @@ export default function TeacherCreateTestPage() {
   }, [aiDifficulty, t]);
 
   const effectiveDifficultyLabel = createMode === "ai" ? aiDifficultyLabel : difficultyLabel;
-  const createDisabled = submitting || ((createMode === "ai" || createMode === "file") && !materialGenerated);
+  const createDisabled = loadingEditDraft || submitting || ((createMode === "ai" || createMode === "file") && !materialGenerated);
   const generationProgressStyle = {
     "--generation-progress": `${Math.max(0, Math.min(100, generationProgress))}%`,
   } as CSSProperties;
+
+  useEffect(() => {
+    setEditingTestId(editIdFromQuery);
+  }, [editIdFromQuery]);
 
   useEffect(() => {
     const key = toDraftStorageKey();
@@ -299,6 +366,39 @@ export default function TeacherCreateTestPage() {
       // ignore malformed draft
     }
   }, []);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token || !editingTestId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setLoadingEditDraft(true);
+        const details = await getTeacherCustomTest(token, editingTestId);
+        if (cancelled) return;
+        setDraft(draftFromCustomTestDetails(details));
+        setSelectedGroupIds(details.groups.map((item) => Number(item.id)).filter((value) => Number.isFinite(value) && value > 0));
+        setCreateMode("manual");
+        setMaterialGenerated(true);
+      } catch (requestError) {
+        if (cancelled) return;
+        toast.error(
+          requestError instanceof Error
+            ? requestError.message
+            : t("Не удалось загрузить тест для редактирования.", "Өңдеуге арналған тестті жүктеу мүмкін болмады."),
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingEditDraft(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editingTestId, t]);
 
   useEffect(() => {
     const key = toDraftStorageKey();
@@ -596,29 +696,10 @@ export default function TeacherCreateTestPage() {
       return;
     }
 
-    if (selectedGroupIds.length === 0) {
-      toast.error(
-        t(
-          "Выберите группу.",
-          "Топты таңдаңыз.",
-        ),
-      );
-      return;
-    }
-
     const allowedGroupIds = new Set(groups.map((group) => group.id));
     const selectedExistingGroupIds = selectedGroupIds.filter((groupId) => allowedGroupIds.has(groupId));
     if (selectedExistingGroupIds.length !== selectedGroupIds.length) {
       setSelectedGroupIds(selectedExistingGroupIds);
-    }
-    if (selectedExistingGroupIds.length === 0) {
-      toast.error(
-        t(
-          "Выберите группу заново.",
-          "Топты қайта таңдаңыз.",
-        ),
-      );
-      return;
     }
 
     let payloadQuestions: TeacherCustomQuestionInput[];
@@ -631,23 +712,44 @@ export default function TeacherCreateTestPage() {
 
     try {
       setSubmitting(true);
-      await createTeacherCustomTest(token, {
+      const requestPayload = {
         title: normalizedTitle,
         duration_minutes: draft.duration_minutes,
         warning_limit: draft.warning_limit,
         due_date: draft.due_date || null,
         group_ids: selectedExistingGroupIds,
         questions: payloadQuestions,
-      });
+      };
+      if (editingTestId) {
+        await updateTeacherCustomTest(token, editingTestId, requestPayload);
+        setSuccessModalMode("update");
+      } else {
+        await createTeacherCustomTest(token, requestPayload);
+        setSuccessModalMode("create");
+      }
 
+      const key = toDraftStorageKey();
+      if (key) {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          // ignore localStorage quota errors
+        }
+      }
       setDraft(createInitialDraft());
       setSelectedGroupIds([]);
+      if (editingTestId) {
+        setEditingTestId(null);
+        router.replace("/teacher/create-test");
+      }
       setCreatedSuccessModalOpen(true);
     } catch (requestError) {
       toast.error(
         requestError instanceof Error
           ? requestError.message
-          : t("Не удалось создать тест.", "Тестті құру мүмкін болмады."),
+          : editingTestId
+            ? t("Не удалось обновить тест.", "Тестті жаңарту мүмкін болмады.")
+            : t("Не удалось создать тест.", "Тестті құру мүмкін болмады."),
       );
     } finally {
       setSubmitting(false);
@@ -661,13 +763,20 @@ export default function TeacherCreateTestPage() {
           <div className={styles.topGrid}>
             <section className={styles.topColumn}>
               <header className={styles.headerBlock}>
-                <h2 className={styles.title}>{t("Создать тест", "Тест құру")}</h2>
+                <h2 className={styles.title}>
+                  {editingTestId ? t("Редактировать тест", "Тестті өңдеу") : t("Создать тест", "Тест құру")}
+                </h2>
                 <p className={styles.subtitle}>
                   {t(
                     "Соберите собственный тест: тема, лимиты и вопросы с правильными ответами",
                     "Өз тестіңізді жасаңыз: тақырып, лимиттер және дұрыс жауаптары бар сұрақтар",
                   )}
                 </p>
+                {loadingEditDraft ? (
+                  <p className={styles.subtitle}>
+                    {t("Загружаем данные теста...", "Тест деректері жүктелуде...")}
+                  </p>
+                ) : null}
               </header>
 
               <section className={styles.heroPanel}>
@@ -934,10 +1043,14 @@ export default function TeacherCreateTestPage() {
                 <div className={styles.heroActions}>
                   <button className={styles.createButton} disabled={createDisabled} onClick={() => void submitCustomTest()} type="button">
                     {submitting
-                      ? t("Создаем...", "Құрылуда...")
+                      ? editingTestId
+                        ? t("Сохраняем...", "Сақталуда...")
+                        : t("Создаем...", "Құрылуда...")
                       : (createMode === "ai" || createMode === "file") && !materialGenerated
                         ? t("Подготовьте материал", "Материалды дайындаңыз")
-                        : t("Создать тест", "Тест құру")}
+                        : editingTestId
+                          ? t("Сохранить тест", "Тестті сақтау")
+                          : t("Создать тест", "Тест құру")}
                   </button>
                   <button className={styles.clearButton} onClick={clearDraft} type="button">
                     {t("Очистить форму", "Форманы тазалау")}
@@ -1159,11 +1272,27 @@ export default function TeacherCreateTestPage() {
           <footer className={styles.footer}>oku.com.kz</footer>
         </div>
         {createdSuccessModalOpen ? (
-          <div className={styles.successOverlay} role="dialog" aria-modal="true" aria-label={t("Тест успешно создан", "Тест сәтті құрылды")}>
+          <div
+            className={styles.successOverlay}
+            role="dialog"
+            aria-modal="true"
+            aria-label={successModalMode === "update" ? t("Тест успешно обновлён", "Тест сәтті жаңартылды") : t("Тест успешно создан", "Тест сәтті құрылды")}
+          >
             <div className={styles.successModal}>
               <img alt="" aria-hidden="true" className={styles.successModalIcon} src={assetPaths.icons.testCreated} />
-              <p className={styles.successModalTitle}>{t("Тест успешно создан", "Тест сәтті құрылды")}</p>
-              <button className={styles.successModalButton} onClick={() => setCreatedSuccessModalOpen(false)} type="button">
+              <p className={styles.successModalTitle}>
+                {successModalMode === "update"
+                  ? t("Тест успешно обновлён", "Тест сәтті жаңартылды")
+                  : t("Тест успешно создан", "Тест сәтті құрылды")}
+              </p>
+              <button
+                className={styles.successModalButton}
+                onClick={() => {
+                  setCreatedSuccessModalOpen(false);
+                  router.push("/teacher/tests");
+                }}
+                type="button"
+              >
                 {t("Продолжить", "Жалғастыру")}
               </button>
             </div>
@@ -1171,5 +1300,13 @@ export default function TeacherCreateTestPage() {
         ) : null}
       </AppShell>
     </AuthGuard>
+  );
+}
+
+export default function TeacherCreateTestPage() {
+  return (
+    <Suspense fallback={null}>
+      <TeacherCreateTestPageContent />
+    </Suspense>
   );
 }

@@ -7,8 +7,10 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/login", "/register"],
+        allow: ["/", "/students", "/teachers", "/institutions", "/about", "/price", "/user-agreement"],
         disallow: [
+          "/login",
+          "/register",
           "/dashboard",
           "/test",
           "/results",
@@ -18,10 +20,14 @@ export default function robots(): MetadataRoute.Robots {
           "/blitz",
           "/my-group",
           "/teacher",
+          "/institution-admin",
+          "/methodist",
+          "/superadmin",
+          "/activate",
         ],
       },
     ],
     sitemap: absoluteUrl("/sitemap.xml"),
-    host: siteUrl,
+    host: siteUrl.replace(/^https?:\/\//, ""),
   };
 }

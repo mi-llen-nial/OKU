@@ -11,19 +11,26 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.config import settings
-from app.core.deps import DBSession, require_role
+from app.core.deps import DBSession, get_active_memberships, require_role
 from app.models import (
     DifficultyLevel,
     Group,
     GroupInvitation,
     GroupInviteLink,
     GroupMembership,
+    GroupTeacherAssignment,
+    InstitutionMembership,
+    InstitutionMembershipRole,
+    InstitutionMembershipStatus,
     InvitationStatus,
     PreferredLanguage,
     StudentProfile,
     TeacherAuthoredQuestion,
     TeacherAuthoredTestGroup,
     TeacherAuthoredTest,
+    TestAssignment,
+    TestModerationStatus,
+    TestReviewRequest,
     Test,
     TestSession,
     TestMode,
@@ -48,9 +55,13 @@ from app.schemas.teacher_tests import (
     TeacherCustomMaterialParseResponse,
     TeacherCustomMaterialGenerateResponse,
     TeacherCustomMaterialQuestion,
+    TeacherCustomTestAssignRequest,
+    TeacherCustomTestAssignResponse,
     TeacherCustomTestCreateRequest,
+    TeacherCustomTestUpdateRequest,
     TeacherCustomGroupBrief,
     TeacherCustomTestListItem,
+    TeacherCustomTestSubmitReviewResponse,
     TeacherCustomTestResultsResponse,
     TeacherCustomTestResultsGroupItem,
     TeacherCustomTestResultsStudentItem,
@@ -58,6 +69,7 @@ from app.schemas.teacher_tests import (
 )
 from app.schemas.tests import HistoryItemResponse, StudentProgressResponse
 from app.services.cache import cache
+from app.services.material_storage import material_storage
 from app.services.custom_tests import custom_test_duration_minutes
 from app.services.progress import (
     build_group_analytics,
@@ -71,7 +83,11 @@ from app.services.teacher_material_service import (
     MaterialQualityError,
     teacher_material_service,
 )
+from app.worker.queue import enqueue_task
+from app.worker.tasks import generate_teacher_custom_material_task
 from app.services.question_quality import validate_question_payload
+from app.services.audit_logs import audit_log_service
+from app.services.notifications import notification_service
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 logger = logging.getLogger(__name__)
@@ -82,17 +98,46 @@ def my_groups(
     db: DBSession,
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> list[TeacherGroupListItem]:
-    rows = db.execute(
-        select(
-            Group.id,
-            Group.name,
-            func.count(GroupMembership.id).label("members_count"),
-        )
-        .outerjoin(GroupMembership, GroupMembership.group_id == Group.id)
-        .where(Group.teacher_id == current_user.id)
-        .group_by(Group.id)
-        .order_by(Group.id.desc())
-    ).all()
+    memberships = _get_active_teacher_memberships(db=db, teacher_user_id=current_user.id)
+    membership_ids = [int(item.id) for item in memberships]
+    has_institutional_memberships = bool(membership_ids)
+
+    assigned_rows = []
+    if has_institutional_memberships:
+        assigned_rows = db.execute(
+            select(
+                Group.id,
+                Group.name,
+                func.count(GroupMembership.id).label("members_count"),
+            )
+            .join(GroupTeacherAssignment, GroupTeacherAssignment.group_id == Group.id)
+            .outerjoin(GroupMembership, GroupMembership.group_id == Group.id)
+            .where(GroupTeacherAssignment.teacher_membership_id.in_(membership_ids))
+            .group_by(Group.id)
+            .order_by(Group.id.desc())
+        ).all()
+    assigned_ids = {int(row.id) for row in assigned_rows}
+
+    legacy_rows = []
+    if not has_institutional_memberships:
+        legacy_rows = db.execute(
+            select(
+                Group.id,
+                Group.name,
+                func.count(GroupMembership.id).label("members_count"),
+            )
+            .outerjoin(GroupMembership, GroupMembership.group_id == Group.id)
+            .where(
+                Group.teacher_id == current_user.id,
+                Group.institution_id.is_(None),
+                Group.id.not_in(assigned_ids or [-1]),
+            )
+            .group_by(Group.id)
+            .order_by(Group.id.desc())
+        ).all()
+
+    rows = list(assigned_rows) + list(legacy_rows)
+    rows.sort(key=lambda item: int(item.id), reverse=True)
     return [
         TeacherGroupListItem(
             id=int(row.id),
@@ -109,75 +154,12 @@ def create_group(
     db: DBSession,
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> TeacherGroupCreateResponse:
-    groups_count = _count_teacher_groups(db=db, teacher_id=current_user.id)
-    if groups_count >= settings.teacher_max_groups:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Можно создать не более {settings.teacher_max_groups} групп.",
-        )
-
-    group_name = payload.name.strip()
-    if not group_name:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название группы не может быть пустым")
-
-    existing_group = db.scalar(select(Group).where(func.lower(Group.name) == group_name.lower()))
-    if existing_group:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Группа с таким названием уже существует")
-
-    student_ids = sorted(set(int(item) for item in payload.student_ids if int(item) > 0))
-    max_members_limit = _effective_group_members_limit()
-    if len(student_ids) > max_members_limit:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"В группе может быть не более {max_members_limit} участников.",
-        )
-
-    if student_ids:
-        students = db.scalars(select(User).where(User.id.in_(student_ids), User.role == UserRole.student)).all()
-        student_id_set = {student.id for student in students}
-        if len(student_id_set) != len(student_ids):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Часть выбранных участников не найдена")
-
-        accepted = db.scalars(
-            select(GroupInvitation).where(
-                GroupInvitation.teacher_id == current_user.id,
-                GroupInvitation.student_id.in_(student_ids),
-                GroupInvitation.status == InvitationStatus.accepted,
-            )
-        ).all()
-        accepted_ids = {item.student_id for item in accepted}
-        missing_ids = [item for item in student_ids if item not in accepted_ids]
-        if missing_ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Добавлять в группу можно только студентов с принятым приглашением.",
-            )
-
-    group = Group(name=group_name, teacher_id=current_user.id)
-    db.add(group)
-    db.flush()
-
-    members_count = 0
-    if student_ids:
-        for student_id in student_ids:
-            db.execute(delete(GroupMembership).where(GroupMembership.student_id == student_id))
-            db.add(GroupMembership(student_id=student_id, group_id=group.id))
-
-            profile = db.get(StudentProfile, student_id)
-            if not profile:
-                profile = StudentProfile(
-                    user_id=student_id,
-                    preferred_language=PreferredLanguage.ru,
-                )
-                db.add(profile)
-            profile.group_id = group.id
-            members_count += 1
-
-    db.commit()
-    return TeacherGroupCreateResponse(
-        id=group.id,
-        name=group.name,
-        members_count=members_count,
+    _ = payload
+    _ = db
+    _ = current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Официальные группы создаёт администратор учебного учреждения.",
     )
 
 
@@ -234,29 +216,13 @@ def rename_group(
     db: DBSession,
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> TeacherGroupCreateResponse:
-    group = _get_teacher_group(db=db, teacher_id=current_user.id, group_id=group_id)
-
-    group_name = payload.name.strip()
-    if not group_name:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название группы не может быть пустым")
-
-    existing_group = db.scalar(
-        select(Group).where(
-            Group.id != group.id,
-            func.lower(Group.name) == group_name.lower(),
-        )
-    )
-    if existing_group:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Группа с таким названием уже существует")
-
-    group.name = group_name
-    db.commit()
-
-    members_count = _count_group_members(db=db, group_id=group.id)
-    return TeacherGroupCreateResponse(
-        id=group.id,
-        name=group.name,
-        members_count=members_count,
+    _ = group_id
+    _ = payload
+    _ = db
+    _ = current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Изменять официальные группы может только администратор учебного учреждения.",
     )
 
 
@@ -266,14 +232,13 @@ def delete_group(
     db: DBSession,
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> None:
-    group = _get_teacher_group(db=db, teacher_id=current_user.id, group_id=group_id)
-
-    profiles = db.scalars(select(StudentProfile).where(StudentProfile.group_id == group.id)).all()
-    for profile in profiles:
-        profile.group_id = None
-
-    db.delete(group)
-    db.commit()
+    _ = group_id
+    _ = db
+    _ = current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Удалять официальные группы может только администратор учебного учреждения.",
+    )
 
 
 @router.delete("/groups/{group_id}/members/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -283,24 +248,14 @@ def remove_group_member(
     db: DBSession,
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> None:
-    _get_teacher_group(db=db, teacher_id=current_user.id, group_id=group_id)
-
-    membership = db.scalar(
-        select(GroupMembership).where(
-            GroupMembership.group_id == group_id,
-            GroupMembership.student_id == student_id,
-        )
+    _ = group_id
+    _ = student_id
+    _ = db
+    _ = current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Состав группы изменяет администратор учебного учреждения.",
     )
-    if not membership:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ученик не состоит в этой группе")
-
-    db.delete(membership)
-
-    profile = db.get(StudentProfile, student_id)
-    if profile and profile.group_id == group_id:
-        profile.group_id = None
-
-    db.commit()
 
 
 @router.post("/invitations", response_model=TeacherInvitationResponse)
@@ -309,62 +264,13 @@ def send_invitation(
     db: DBSession,
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> TeacherInvitationResponse:
-    username = payload.username.strip().lstrip("@")
-    if not username:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Введите username ученика")
-
-    student = db.scalar(select(User).where(func.lower(User.username) == username.lower()))
-    if not student:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ученик с таким username не найден")
-    if student.role in {UserRole.teacher}:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Нельзя отправлять приглашение аккаунтам с ролью teacher/admin.",
-        )
-    if student.role != UserRole.student:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Приглашать можно только учеников.")
-
-    target_group = None
-    if payload.group_id is not None:
-        target_group = _get_teacher_group(
-            db=db,
-            teacher_id=current_user.id,
-            group_id=payload.group_id,
-        )
-        if _is_student_in_group(db=db, student_id=student.id, group_id=target_group.id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Этот ученик уже состоит в выбранной группе.",
-            )
-        group_members_count = _count_group_members(db=db, group_id=target_group.id)
-        max_members_limit = _effective_group_members_limit()
-        if group_members_count >= max_members_limit:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"В группе уже максимум {max_members_limit} участников.",
-            )
-
-    existing_pending = db.scalar(
-        select(GroupInvitation).where(
-            GroupInvitation.teacher_id == current_user.id,
-            GroupInvitation.student_id == student.id,
-            GroupInvitation.status == InvitationStatus.pending,
-            GroupInvitation.group_id == payload.group_id,
-        )
+    _ = payload
+    _ = db
+    _ = current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Приглашения в институциональные группы отправляет администратор учебного учреждения.",
     )
-    if existing_pending:
-        return _serialize_invitation(existing_pending)
-
-    invitation = GroupInvitation(
-        teacher_id=current_user.id,
-        student_id=student.id,
-        group_id=(target_group.id if target_group else None),
-        status=InvitationStatus.pending,
-    )
-    db.add(invitation)
-    db.commit()
-    db.refresh(invitation)
-    return _serialize_invitation(invitation)
 
 
 @router.post("/groups/{group_id}/invite-link", response_model=TeacherGroupInviteLinkResponse)
@@ -373,35 +279,13 @@ def create_group_invite_link(
     db: DBSession,
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> TeacherGroupInviteLinkResponse:
-    group = _get_teacher_group(db=db, teacher_id=current_user.id, group_id=group_id)
-    now = datetime.now(timezone.utc)
-
-    active_link = db.scalar(
-        select(GroupInviteLink)
-        .where(
-            GroupInviteLink.teacher_id == current_user.id,
-            GroupInviteLink.group_id == group.id,
-            GroupInviteLink.is_active.is_(True),
-        )
-        .order_by(GroupInviteLink.created_at.desc())
+    _ = group_id
+    _ = db
+    _ = current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Ссылки-приглашения формирует администратор учебного учреждения.",
     )
-    if active_link and active_link.expires_at and active_link.expires_at <= now:
-        active_link.is_active = False
-        active_link = None
-
-    if active_link is None:
-        active_link = GroupInviteLink(
-            teacher_id=current_user.id,
-            group_id=group.id,
-            token=_generate_group_invite_token(db=db),
-            is_active=True,
-        )
-        db.add(active_link)
-        db.flush()
-
-    db.commit()
-    db.refresh(active_link)
-    return _serialize_group_invite_link(link=active_link, group_name=group.name)
 
 
 @router.get("/invitations", response_model=list[TeacherInvitationResponse])
@@ -428,22 +312,13 @@ def cancel_invitation(
     db: DBSession,
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> None:
-    invitation = db.scalar(
-        select(GroupInvitation).where(
-            GroupInvitation.id == invitation_id,
-            GroupInvitation.teacher_id == current_user.id,
-        )
+    _ = invitation_id
+    _ = db
+    _ = current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Управление приглашениями выполняет администратор учебного учреждения.",
     )
-    if not invitation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Приглашение не найдено")
-    if invitation.status != InvitationStatus.pending:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Можно отменять только активные (ожидающие) приглашения.",
-        )
-
-    db.delete(invitation)
-    db.commit()
 
 
 @router.get("/custom-tests", response_model=list[TeacherCustomTestListItem])
@@ -451,16 +326,23 @@ def list_custom_tests(
     db: DBSession,
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> list[TeacherCustomTestListItem]:
+    active_institution_ids = _get_active_teacher_institution_ids(db=db, teacher_user_id=current_user.id)
     tests = db.scalars(
         select(TeacherAuthoredTest)
         .options(
             selectinload(TeacherAuthoredTest.questions),
             selectinload(TeacherAuthoredTest.group_links).joinedload(TeacherAuthoredTestGroup.group),
+            selectinload(TeacherAuthoredTest.assignments).joinedload(TestAssignment.group),
         )
         .where(TeacherAuthoredTest.teacher_id == current_user.id)
         .order_by(TeacherAuthoredTest.created_at.desc())
     ).all()
-    return [_serialize_custom_test_list_item(item) for item in tests]
+    visible_tests = [
+        item
+        for item in tests
+        if item.institution_id is None or int(item.institution_id) in active_institution_ids
+    ]
+    return [_serialize_custom_test_list_item(item) for item in visible_tests]
 
 
 @router.post("/custom-tests", response_model=TeacherCustomTestResponse)
@@ -472,144 +354,108 @@ def create_custom_test(
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название теста не может быть пустым.")
-
     if len(payload.questions) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Добавьте хотя бы один вопрос.")
 
     group_ids = sorted({int(item) for item in payload.group_ids if int(item) > 0})
-    if not group_ids:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Выберите минимум одну группу, в которую будет добавлен тест.",
-        )
-
-    teacher_groups = db.scalars(
-        select(Group).where(
-            Group.teacher_id == current_user.id,
-            Group.id.in_(group_ids),
-        )
-    ).all()
-    teacher_group_map = {group.id: group for group in teacher_groups}
-    missing_group_ids = [group_id for group_id in group_ids if group_id not in teacher_group_map]
-    if missing_group_ids:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Часть выбранных групп не найдена или недоступна.",
-        )
+    resolved_groups, institution_id = _resolve_teacher_groups_and_institution(
+        db=db,
+        teacher_user_id=current_user.id,
+        group_ids=group_ids,
+    )
 
     custom_test = TeacherAuthoredTest(
         teacher_id=current_user.id,
+        institution_id=institution_id,
         title=title,
         time_limit_seconds=int(payload.duration_minutes) * 60,
         warning_limit=int(payload.warning_limit),
         due_date=payload.due_date,
+        moderation_status=TestModerationStatus.draft,
     )
     db.add(custom_test)
     db.flush()
 
-    seen_question_hashes: set[str] = set()
-    for idx, question in enumerate(payload.questions, start=1):
-        prompt = question.prompt.strip()
-        if not prompt:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Вопрос #{idx} не может быть пустым.")
-
-        if question.answer_type == "choice":
-            options = [item.strip() for item in question.options if item and item.strip()]
-            if len(options) < 2:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"В вопросе #{idx} с вариантами нужно минимум 2 варианта.",
-                )
-            if question.correct_option_index is None or question.correct_option_index < 0 or question.correct_option_index >= len(options):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"У вопроса #{idx} выберите корректный правильный вариант.",
-                )
-
-            quality_payload = {
-                "type": "single_choice",
-                "prompt": prompt,
-                "options": options,
-                "correct_option_ids": [int(question.correct_option_index) + 1],
-                "topic_tags": [title],
-                "explanation": prompt,
-            }
-        else:
-            sample_answer = (question.sample_answer or "").strip()
-            if not sample_answer:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Для вопроса #{idx} со свободным ответом укажите эталонный ответ.",
-                )
-
-            quality_payload = {
-                "type": "short_text",
-                "prompt": prompt,
-                "sample_answer": sample_answer,
-                "keywords": _extract_keywords(sample_answer),
-                "topic_tags": [title],
-                "explanation": sample_answer,
-            }
-
-        validation = validate_question_payload(
-            payload=quality_payload,
-            language=PreferredLanguage.ru,
-            mode=TestMode.text,
-            difficulty=DifficultyLevel.medium,
-        )
-        if not validation.is_valid:
-            issues = "; ".join(validation.issues)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Вопрос #{idx} не прошёл валидацию: {issues}",
-            )
-
-        normalized = validation.payload
-        content_hash = str(normalized.get("content_hash", "")).strip()
-        if content_hash and content_hash in seen_question_hashes:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Вопрос #{idx} дублирует другой вопрос в этом тесте.",
-            )
-        if content_hash:
-            seen_question_hashes.add(content_hash)
-
-        question_type = str(normalized.get("type", "single_choice")).strip()
-        if question_type not in {"single_choice", "short_text"}:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Вопрос #{idx} имеет неподдерживаемый тип: {question_type}.",
-            )
-
-        options_json = dict(normalized.get("options_json") or {}) if normalized.get("options_json") else None
-        if question.image_data_url:
-            if options_json is None:
-                options_json = {}
-            options_json["image_data_url"] = question.image_data_url
-        correct_answer_json = dict(normalized.get("correct_answer_json") or {})
-
-        db.add(
-            TeacherAuthoredQuestion(
-                test_id=custom_test.id,
-                order_index=idx,
-                prompt=str(normalized.get("prompt", prompt)).strip(),
-                question_type=question_type,
-                options_json=options_json,
-                correct_answer_json=correct_answer_json,
-            )
-        )
-
-    for group_id in group_ids:
-        db.add(
-            TeacherAuthoredTestGroup(
-                test_id=custom_test.id,
-                group_id=group_id,
-            )
-        )
+    _replace_custom_test_questions(
+        db=db,
+        custom_test_id=int(custom_test.id),
+        title=title,
+        questions=payload.questions,
+    )
+    _sync_custom_test_groups(
+        db=db,
+        custom_test=custom_test,
+        target_group_ids=[int(group.id) for group in resolved_groups],
+    )
 
     db.commit()
     db.refresh(custom_test)
     _invalidate_group_tests_cache(db=db, group_ids=group_ids)
+    return _serialize_custom_test(db=db, custom_test_id=custom_test.id, teacher_id=current_user.id)
+
+
+@router.patch("/custom-tests/{custom_test_id}", response_model=TeacherCustomTestResponse)
+def update_custom_test(
+    custom_test_id: int,
+    payload: TeacherCustomTestUpdateRequest,
+    db: DBSession,
+    current_user: User = Depends(require_role(UserRole.teacher)),
+) -> TeacherCustomTestResponse:
+    custom_test = _get_teacher_custom_test(db=db, custom_test_id=custom_test_id, teacher_id=current_user.id)
+
+    if custom_test.moderation_status in {TestModerationStatus.submitted_for_review, TestModerationStatus.in_review}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Тест находится на модерации и временно недоступен для редактирования.",
+        )
+    if custom_test.moderation_status in {TestModerationStatus.approved, TestModerationStatus.archived}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Одобренный или архивный тест нельзя изменить. Создайте новый тест.",
+        )
+
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Название теста не может быть пустым.")
+    if len(payload.questions) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Добавьте хотя бы один вопрос.")
+
+    group_ids = sorted({int(item) for item in payload.group_ids if int(item) > 0})
+    resolved_groups, institution_id = _resolve_teacher_groups_and_institution(
+        db=db,
+        teacher_user_id=current_user.id,
+        group_ids=group_ids,
+        fallback_institution_id=(int(custom_test.institution_id) if custom_test.institution_id is not None else None),
+    )
+
+    previous_group_ids = sorted({int(group.id) for group in _resolve_custom_test_groups(custom_test)})
+
+    custom_test.title = title
+    custom_test.time_limit_seconds = int(payload.duration_minutes) * 60
+    custom_test.warning_limit = int(payload.warning_limit)
+    custom_test.due_date = payload.due_date
+    custom_test.institution_id = institution_id
+    custom_test.moderation_comment = None
+    if custom_test.moderation_status in {TestModerationStatus.needs_revision, TestModerationStatus.rejected}:
+        # Teacher updated the draft after feedback; resubmission is a separate explicit action.
+        custom_test.moderation_status = TestModerationStatus.draft
+
+    _replace_custom_test_questions(
+        db=db,
+        custom_test_id=int(custom_test.id),
+        title=title,
+        questions=payload.questions,
+    )
+    _sync_custom_test_groups(
+        db=db,
+        custom_test=custom_test,
+        target_group_ids=[int(group.id) for group in resolved_groups],
+    )
+
+    db.commit()
+    db.refresh(custom_test)
+    _invalidate_group_tests_cache(db=db, group_ids=sorted(set(previous_group_ids + group_ids)))
+    _invalidate_teacher_custom_results_cache(teacher_id=current_user.id, custom_test_id=int(custom_test.id))
     return _serialize_custom_test(db=db, custom_test_id=custom_test.id, teacher_id=current_user.id)
 
 
@@ -679,6 +525,36 @@ def generate_custom_test_material(
         rejected_count=int(validated.rejected_count),
         questions=validated.questions,
     )
+
+
+@router.post("/material/generate-async")
+def generate_custom_test_material_async(
+    payload: TeacherCustomMaterialGenerateRequest,
+    current_user: User = Depends(require_role(UserRole.teacher)),
+) -> dict[str, str]:
+    """
+    Async worker-backed teacher material generation.
+
+    Returns `job_id`. Poll it via `GET /api/v1/jobs/{job_id}`.
+    """
+    topic = payload.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Тема не может быть пустой.")
+
+    questions_count = max(1, int(payload.questions_count))
+    job_id = enqueue_task(
+        generate_teacher_custom_material_task,
+        topic=topic,
+        difficulty=payload.difficulty.value,
+        language=payload.language.value,
+        questions_count=questions_count,
+        user_id=current_user.id,
+        meta={"user_id": int(current_user.id)},
+    )
+    if not job_id:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Worker queue is unavailable")
+
+    return {"job_id": job_id}
 
 
 @router.post("/custom-tests/parse-file", response_model=TeacherCustomMaterialParseResponse)
@@ -764,6 +640,178 @@ def get_custom_test(
     return _serialize_custom_test(db=db, custom_test_id=custom_test_id, teacher_id=current_user.id)
 
 
+@router.post("/custom-tests/{custom_test_id}/submit-review", response_model=TeacherCustomTestSubmitReviewResponse)
+def submit_custom_test_for_review(
+    custom_test_id: int,
+    db: DBSession,
+    current_user: User = Depends(require_role(UserRole.teacher)),
+) -> TeacherCustomTestSubmitReviewResponse:
+    custom_test = _get_teacher_custom_test(db=db, custom_test_id=custom_test_id, teacher_id=current_user.id)
+    institution_id = _resolve_custom_test_institution_id(db=db, custom_test=custom_test)
+    membership = _get_teacher_membership_for_institution(
+        db=db,
+        teacher_user_id=current_user.id,
+        institution_id=institution_id,
+    )
+
+    if custom_test.moderation_status in {TestModerationStatus.submitted_for_review, TestModerationStatus.in_review}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Тест уже отправлен на модерацию.",
+        )
+    if custom_test.moderation_status in {TestModerationStatus.needs_revision, TestModerationStatus.rejected}:
+        custom_test.current_draft_version = int(custom_test.current_draft_version or 1) + 1
+
+    now = datetime.now(timezone.utc)
+    custom_test.moderation_status = TestModerationStatus.submitted_for_review
+    custom_test.submitted_for_review_at = now
+    custom_test.reviewed_at = None
+    custom_test.reviewed_by_membership_id = None
+    custom_test.moderation_comment = None
+    custom_test.institution_id = institution_id
+
+    review_request = TestReviewRequest(
+        institution_id=institution_id,
+        test_id=custom_test.id,
+        submitted_version=int(custom_test.current_draft_version or 1),
+        status=TestModerationStatus.submitted_for_review,
+        requested_by_membership_id=membership.id,
+        reviewer_membership_id=None,
+        comment=None,
+        created_at=now,
+        reviewed_at=None,
+    )
+    db.add(review_request)
+
+    methodist_memberships = db.scalars(
+        select(InstitutionMembership).where(
+            InstitutionMembership.institution_id == institution_id,
+            InstitutionMembership.role == InstitutionMembershipRole.methodist,
+            InstitutionMembership.status == InstitutionMembershipStatus.active,
+        )
+    ).all()
+    for row in methodist_memberships:
+        notification_service.create(
+            db=db,
+            user_id=int(row.user_id),
+            institution_id=institution_id,
+            notification_type="test_submitted_for_review",
+            title="Новый тест на модерацию",
+            message=f"Тест «{custom_test.title}» отправлен на проверку.",
+            data={"test_id": custom_test.id, "version": custom_test.current_draft_version},
+        )
+
+    audit_log_service.record(
+        db=db,
+        institution_id=institution_id,
+        actor_user_id=current_user.id,
+        action="test_submitted_for_review",
+        target_type="teacher_authored_test",
+        target_id=custom_test.id,
+        metadata={
+            "status": custom_test.moderation_status.value,
+            "version": custom_test.current_draft_version,
+        },
+    )
+
+    db.commit()
+    db.refresh(custom_test)
+    return TeacherCustomTestSubmitReviewResponse(
+        test_id=int(custom_test.id),
+        status=custom_test.moderation_status,
+        current_draft_version=int(custom_test.current_draft_version or 1),
+        submitted_for_review_at=custom_test.submitted_for_review_at or now,
+    )
+
+
+@router.post("/custom-tests/{custom_test_id}/assign", response_model=TeacherCustomTestAssignResponse)
+def assign_custom_test_to_groups(
+    custom_test_id: int,
+    payload: TeacherCustomTestAssignRequest,
+    db: DBSession,
+    current_user: User = Depends(require_role(UserRole.teacher)),
+) -> TeacherCustomTestAssignResponse:
+    custom_test = _get_teacher_custom_test(db=db, custom_test_id=custom_test_id, teacher_id=current_user.id)
+    if custom_test.moderation_status != TestModerationStatus.approved:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Назначать группе можно только тест в статусе approved.",
+        )
+
+    group_ids = sorted({int(item) for item in payload.group_ids if int(item) > 0})
+    if not group_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Выберите минимум одну группу.")
+
+    institution_id = _resolve_custom_test_institution_id(db=db, custom_test=custom_test)
+    membership = _get_teacher_membership_for_institution(
+        db=db,
+        teacher_user_id=current_user.id,
+        institution_id=institution_id,
+    )
+    groups = _get_teacher_accessible_groups(
+        db=db,
+        teacher_user_id=current_user.id,
+        group_ids=group_ids,
+        institution_id=institution_id,
+    )
+    group_map = {int(group.id): group for group in groups}
+    missing_group_ids = [group_id for group_id in group_ids if group_id not in group_map]
+    if missing_group_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Часть выбранных групп не найдена или недоступна.",
+        )
+
+    assigned_group_ids: list[int] = []
+    for group_id in group_ids:
+        link = db.scalar(
+            select(TestAssignment).where(
+                TestAssignment.test_id == custom_test.id,
+                TestAssignment.group_id == group_id,
+            )
+        )
+        if link is None:
+            db.add(
+                TestAssignment(
+                    test_id=custom_test.id,
+                    group_id=group_id,
+                    assigned_by_membership_id=membership.id,
+                )
+            )
+        legacy_link = db.scalar(
+            select(TeacherAuthoredTestGroup).where(
+                TeacherAuthoredTestGroup.test_id == custom_test.id,
+                TeacherAuthoredTestGroup.group_id == group_id,
+            )
+        )
+        if legacy_link is None:
+            db.add(
+                TeacherAuthoredTestGroup(
+                    test_id=custom_test.id,
+                    group_id=group_id,
+                )
+            )
+        assigned_group_ids.append(group_id)
+
+    audit_log_service.record(
+        db=db,
+        institution_id=institution_id,
+        actor_user_id=current_user.id,
+        action="test_assigned_to_groups",
+        target_type="teacher_authored_test",
+        target_id=custom_test.id,
+        metadata={"group_ids": assigned_group_ids},
+    )
+
+    db.commit()
+    _invalidate_group_tests_cache(db=db, group_ids=assigned_group_ids)
+    return TeacherCustomTestAssignResponse(
+        test_id=int(custom_test.id),
+        status=custom_test.moderation_status,
+        assigned_group_ids=assigned_group_ids,
+    )
+
+
 @router.get("/custom-tests/{custom_test_id}/results", response_model=TeacherCustomTestResultsResponse)
 def get_custom_test_results(
     custom_test_id: int,
@@ -842,7 +890,10 @@ def delete_custom_test(
     current_user: User = Depends(require_role(UserRole.teacher)),
 ) -> None:
     custom_test = _get_teacher_custom_test(db=db, custom_test_id=custom_test_id, teacher_id=current_user.id)
-    affected_group_ids = sorted({link.group_id for link in custom_test.group_links})
+    affected_group_ids = sorted({
+        int(group.id)
+        for group in _resolve_custom_test_groups(custom_test)
+    })
     _invalidate_teacher_custom_results_cache(teacher_id=current_user.id, custom_test_id=custom_test.id)
     db.delete(custom_test)
     db.commit()
@@ -896,12 +947,14 @@ def student_history_for_teacher(
 
 
 def _get_teacher_group(*, db: DBSession, teacher_id: int, group_id: int) -> Group:
-    group = db.scalar(select(Group).where(Group.id == group_id))
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Группа не найдена")
-    if group.teacher_id != teacher_id:
+    groups = _get_teacher_accessible_groups(
+        db=db,
+        teacher_user_id=teacher_id,
+        group_ids=[group_id],
+    )
+    if not groups:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Группа недоступна")
-    return group
+    return groups[0]
 
 
 def _assert_student_visible_to_teacher(*, db: DBSession, teacher_id: int, student_id: int) -> None:
@@ -909,20 +962,61 @@ def _assert_student_visible_to_teacher(*, db: DBSession, teacher_id: int, studen
     if not student or student.role != UserRole.student:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Студент не найден")
 
-    membership = db.scalar(
-        select(GroupMembership)
-        .join(Group, Group.id == GroupMembership.group_id)
-        .where(
-            GroupMembership.student_id == student_id,
-            Group.teacher_id == teacher_id,
+    teacher_memberships = _get_active_teacher_memberships(db=db, teacher_user_id=teacher_id)
+    membership_ids = [int(item.id) for item in teacher_memberships]
+    membership = None
+    if membership_ids:
+        membership = db.scalar(
+            select(GroupMembership)
+            .join(GroupTeacherAssignment, GroupTeacherAssignment.group_id == GroupMembership.group_id)
+            .where(
+                GroupMembership.student_id == student_id,
+                GroupTeacherAssignment.teacher_membership_id.in_(membership_ids),
+            )
         )
-    )
     if not membership:
+        if teacher_memberships:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Студент не относится к вашим группам")
+
+        legacy_membership = db.scalar(
+            select(GroupMembership)
+            .join(Group, Group.id == GroupMembership.group_id)
+            .where(
+                GroupMembership.student_id == student_id,
+                Group.teacher_id == teacher_id,
+                Group.institution_id.is_(None),
+            )
+        )
+        if legacy_membership is not None:
+            return
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Студент не относится к вашим группам")
 
 
 def _count_teacher_groups(*, db: DBSession, teacher_id: int) -> int:
-    value = db.scalar(select(func.count(Group.id)).where(Group.teacher_id == teacher_id))
+    memberships = _get_active_teacher_memberships(db=db, teacher_user_id=teacher_id)
+    membership_ids = [int(item.id) for item in memberships]
+    assigned_count = 0
+    if membership_ids:
+        assigned_count = int(
+            db.scalar(
+                select(func.count(func.distinct(GroupTeacherAssignment.group_id))).where(
+                    GroupTeacherAssignment.teacher_membership_id.in_(membership_ids)
+                )
+            )
+            or 0
+        )
+    legacy_count = 0
+    if not memberships:
+        legacy_count = int(
+            db.scalar(
+                select(func.count(Group.id)).where(
+                    Group.teacher_id == teacher_id,
+                    Group.institution_id.is_(None),
+                )
+            )
+            or 0
+        )
+    value = int(assigned_count or 0) + int(legacy_count or 0)
     return int(value or 0)
 
 
@@ -995,6 +1089,7 @@ def _get_teacher_custom_test(*, db: DBSession, custom_test_id: int, teacher_id: 
         .options(
             selectinload(TeacherAuthoredTest.questions),
             selectinload(TeacherAuthoredTest.group_links).joinedload(TeacherAuthoredTestGroup.group),
+            selectinload(TeacherAuthoredTest.assignments).joinedload(TestAssignment.group),
         )
         .where(
             TeacherAuthoredTest.id == custom_test_id,
@@ -1003,6 +1098,12 @@ def _get_teacher_custom_test(*, db: DBSession, custom_test_id: int, teacher_id: 
     )
     if not custom_test:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тест не найден")
+    if custom_test.institution_id is not None:
+        _get_teacher_membership_for_institution(
+            db=db,
+            teacher_user_id=teacher_id,
+            institution_id=int(custom_test.institution_id),
+        )
     return custom_test
 
 
@@ -1053,6 +1154,12 @@ def _serialize_custom_test(*, db: DBSession, custom_test_id: int, teacher_id: in
         due_date=custom_test.due_date,
         questions_count=len(custom_test.questions),
         groups=_serialize_custom_groups(custom_test),
+        moderation_status=custom_test.moderation_status,
+        moderation_comment=custom_test.moderation_comment,
+        submitted_for_review_at=custom_test.submitted_for_review_at,
+        reviewed_at=custom_test.reviewed_at,
+        current_draft_version=int(custom_test.current_draft_version or 1),
+        approved_version=custom_test.approved_version,
         created_at=custom_test.created_at,
         updated_at=custom_test.updated_at,
         questions=questions,
@@ -1061,11 +1168,12 @@ def _serialize_custom_test(*, db: DBSession, custom_test_id: int, teacher_id: in
 
 def _serialize_custom_groups(custom_test: TeacherAuthoredTest) -> list[TeacherCustomGroupBrief]:
     payload: list[TeacherCustomGroupBrief] = []
-    links = sorted(custom_test.group_links, key=lambda item: item.group_id)
-    for link in links:
-        if not link.group:
+    seen_group_ids: set[int] = set()
+    for group in _resolve_custom_test_groups(custom_test):
+        if int(group.id) in seen_group_ids:
             continue
-        payload.append(TeacherCustomGroupBrief(id=link.group.id, name=link.group.name))
+        seen_group_ids.add(int(group.id))
+        payload.append(TeacherCustomGroupBrief(id=int(group.id), name=group.name))
     return payload
 
 
@@ -1078,6 +1186,12 @@ def _serialize_custom_test_list_item(custom_test: TeacherAuthoredTest) -> Teache
         due_date=custom_test.due_date,
         questions_count=len(custom_test.questions),
         groups=_serialize_custom_groups(custom_test),
+        moderation_status=custom_test.moderation_status,
+        moderation_comment=custom_test.moderation_comment,
+        submitted_for_review_at=custom_test.submitted_for_review_at,
+        reviewed_at=custom_test.reviewed_at,
+        current_draft_version=int(custom_test.current_draft_version or 1),
+        approved_version=custom_test.approved_version,
         created_at=custom_test.created_at,
         updated_at=custom_test.updated_at,
     )
@@ -1089,12 +1203,7 @@ def _build_custom_test_results_payload(
     custom_test: TeacherAuthoredTest,
     selected_group_ids: list[int],
 ) -> tuple[list[TeacherCustomTestResultsGroupItem], list[TeacherCustomTestResultsStudentItem]]:
-    assigned_groups = []
-    for link in custom_test.group_links:
-        if not link.group:
-            continue
-        assigned_groups.append(link.group)
-    assigned_groups = sorted(assigned_groups, key=lambda group: group.name.lower())
+    assigned_groups = sorted(_resolve_custom_test_groups(custom_test), key=lambda group: group.name.lower())
     assigned_group_ids = {group.id for group in assigned_groups}
 
     filtered_group_ids = sorted({int(group_id) for group_id in selected_group_ids if int(group_id) in assigned_group_ids})
@@ -1263,3 +1372,338 @@ def _extract_keywords(sample_answer: str) -> list[str]:
         if len(keywords) >= 8:
             break
     return keywords
+
+
+def _get_active_teacher_memberships(*, db: DBSession, teacher_user_id: int) -> list[InstitutionMembership]:
+    return get_active_memberships(
+        db=db,
+        user_id=int(teacher_user_id),
+        roles={InstitutionMembershipRole.teacher},
+    )
+
+
+def _get_active_teacher_institution_ids(*, db: DBSession, teacher_user_id: int) -> set[int]:
+    memberships = _get_active_teacher_memberships(db=db, teacher_user_id=teacher_user_id)
+    return {int(item.institution_id) for item in memberships if int(item.institution_id) > 0}
+
+
+def _get_teacher_membership_for_institution(
+    *,
+    db: DBSession,
+    teacher_user_id: int,
+    institution_id: int,
+) -> InstitutionMembership:
+    memberships = _get_active_teacher_memberships(db=db, teacher_user_id=teacher_user_id)
+    for membership in memberships:
+        if int(membership.institution_id) == int(institution_id):
+            return membership
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="У вас нет активного членства преподавателя в этом учебном учреждении.",
+    )
+
+
+def _get_teacher_accessible_groups(
+    *,
+    db: DBSession,
+    teacher_user_id: int,
+    group_ids: list[int] | None = None,
+    institution_id: int | None = None,
+) -> list[Group]:
+    memberships = _get_active_teacher_memberships(db=db, teacher_user_id=teacher_user_id)
+    membership_ids = [int(item.id) for item in memberships]
+    has_institutional_memberships = bool(membership_ids)
+
+    assigned_stmt = (
+        select(Group)
+        .join(GroupTeacherAssignment, GroupTeacherAssignment.group_id == Group.id)
+        .where(GroupTeacherAssignment.teacher_membership_id.in_(membership_ids or [-1]))
+    )
+    if group_ids is not None:
+        normalized_ids = sorted({int(item) for item in group_ids if int(item) > 0})
+        assigned_stmt = assigned_stmt.where(Group.id.in_(normalized_ids or [-1]))
+    if institution_id is not None:
+        assigned_stmt = assigned_stmt.where(Group.institution_id == int(institution_id))
+    assigned_groups = db.scalars(assigned_stmt).all()
+
+    groups_by_id: dict[int, Group] = {int(group.id): group for group in assigned_groups}
+    requested_ids = sorted({int(item) for item in (group_ids or []) if int(item) > 0})
+    missing_ids = [group_id for group_id in requested_ids if group_id not in groups_by_id]
+    if missing_ids and institution_id is None and not has_institutional_memberships:
+        legacy_stmt = select(Group).where(
+            Group.id.in_(missing_ids),
+            Group.teacher_id == int(teacher_user_id),
+            Group.institution_id.is_(None),
+        )
+        for group in db.scalars(legacy_stmt).all():
+            groups_by_id[int(group.id)] = group
+
+    if group_ids is None and institution_id is None and not has_institutional_memberships:
+        legacy_stmt = select(Group).where(
+            Group.teacher_id == int(teacher_user_id),
+            Group.institution_id.is_(None),
+        )
+        for group in db.scalars(legacy_stmt).all():
+            groups_by_id.setdefault(int(group.id), group)
+
+    return [groups_by_id[group_id] for group_id in sorted(groups_by_id.keys())]
+
+
+def _resolve_teacher_groups_and_institution(
+    *,
+    db: DBSession,
+    teacher_user_id: int,
+    group_ids: list[int],
+    fallback_institution_id: int | None = None,
+) -> tuple[list[Group], int | None]:
+    normalized_group_ids = sorted({int(group_id) for group_id in group_ids if int(group_id) > 0})
+    groups = _get_teacher_accessible_groups(
+        db=db,
+        teacher_user_id=teacher_user_id,
+        group_ids=normalized_group_ids,
+    )
+    groups_by_id = {int(group.id): group for group in groups}
+    missing_group_ids = [group_id for group_id in normalized_group_ids if group_id not in groups_by_id]
+    if missing_group_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Часть выбранных групп не найдена или недоступна.",
+        )
+
+    if not groups:
+        if fallback_institution_id is not None:
+            _get_teacher_membership_for_institution(
+                db=db,
+                teacher_user_id=teacher_user_id,
+                institution_id=int(fallback_institution_id),
+            )
+            return [], int(fallback_institution_id)
+
+        memberships = _get_active_teacher_memberships(db=db, teacher_user_id=teacher_user_id)
+        if len(memberships) == 1:
+            return [], int(memberships[0].institution_id)
+        if len(memberships) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Для нескольких учреждений выберите группы одного учреждения.",
+            )
+        return [], None
+
+    institution_ids = {
+        int(group.institution_id)
+        for group in groups
+        if group.institution_id is not None
+    }
+    has_legacy_groups = any(group.institution_id is None for group in groups)
+    if has_legacy_groups and institution_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Нельзя смешивать институциональные и legacy-группы в одном тесте.",
+        )
+
+    if len(institution_ids) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Тест может быть привязан только к одному учебному учреждению.",
+        )
+
+    institution_id = next(iter(institution_ids)) if institution_ids else None
+    if institution_id is None and fallback_institution_id is not None:
+        institution_id = int(fallback_institution_id)
+    if (
+        institution_id is not None
+        and fallback_institution_id is not None
+        and int(institution_id) != int(fallback_institution_id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Нельзя перенести тест между разными учебными учреждениями.",
+        )
+
+    if institution_id is not None:
+        _get_teacher_membership_for_institution(
+            db=db,
+            teacher_user_id=teacher_user_id,
+            institution_id=int(institution_id),
+        )
+
+    return [groups_by_id[group_id] for group_id in normalized_group_ids], institution_id
+
+
+def _replace_custom_test_questions(
+    *,
+    db: DBSession,
+    custom_test_id: int,
+    title: str,
+    questions: list,
+) -> None:
+    db.execute(
+        delete(TeacherAuthoredQuestion).where(
+            TeacherAuthoredQuestion.test_id == int(custom_test_id),
+        )
+    )
+
+    for index, question in enumerate(questions):
+        answer_type = "choice" if str(getattr(question, "answer_type", "")).strip() == "choice" else "free_text"
+        prompt = str(getattr(question, "prompt", "") or "").strip()
+        image_data_url = str(getattr(question, "image_data_url", "") or "").strip() or None
+
+        if answer_type == "choice":
+            options = [
+                str(option).strip()
+                for option in (getattr(question, "options", None) or [])
+                if str(option).strip()
+            ]
+            correct_option_index = int(getattr(question, "correct_option_index", 0))
+            payload = {
+                "type": "single_choice",
+                "prompt": prompt,
+                "topic": title,
+                "options": options,
+                "correct_option_ids": [correct_option_index + 1],
+            }
+        else:
+            payload = {
+                "type": "short_text",
+                "prompt": prompt,
+                "topic": title,
+                "sample_answer": str(getattr(question, "sample_answer", "") or "").strip(),
+                "keywords": _extract_keywords(str(getattr(question, "sample_answer", "") or "")),
+            }
+
+        validated = validate_question_payload(
+            payload=payload,
+            language=PreferredLanguage.ru,
+            mode=TestMode.text,
+            difficulty=DifficultyLevel.medium,
+        )
+        if not validated.is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Вопрос №{index + 1} не прошёл проверку качества: {'; '.join(validated.issues)}",
+            )
+
+        options_json = validated.payload.get("options_json")
+        if not isinstance(options_json, dict):
+            options_json = {}
+        else:
+            options_json = dict(options_json)
+        if image_data_url:
+            # Keep existing inline `image_data_url` contract,
+            # but also store a ref field to prepare future object-storage migration.
+            options_json.update(material_storage.build_question_image_options(image_data_url=image_data_url))
+        if not options_json:
+            options_json = None
+
+        db.add(
+            TeacherAuthoredQuestion(
+                test_id=int(custom_test_id),
+                order_index=int(index + 1),
+                prompt=str(validated.payload.get("prompt", "")).strip(),
+                question_type=str(validated.payload.get("type", "single_choice")).strip(),
+                options_json=options_json,
+                correct_answer_json=dict(validated.payload.get("correct_answer_json") or {}),
+            )
+        )
+
+
+def _sync_custom_test_groups(
+    *,
+    db: DBSession,
+    custom_test: TeacherAuthoredTest,
+    target_group_ids: list[int],
+) -> None:
+    normalized_target_group_ids = sorted({int(group_id) for group_id in target_group_ids if int(group_id) > 0})
+    target_ids_set = set(normalized_target_group_ids)
+
+    current_link_group_ids = {
+        int(group_id)
+        for group_id in db.scalars(
+            select(TeacherAuthoredTestGroup.group_id).where(
+                TeacherAuthoredTestGroup.test_id == int(custom_test.id),
+            )
+        ).all()
+    }
+    links_to_remove = current_link_group_ids - target_ids_set
+    if links_to_remove:
+        db.execute(
+            delete(TeacherAuthoredTestGroup).where(
+                TeacherAuthoredTestGroup.test_id == int(custom_test.id),
+                TeacherAuthoredTestGroup.group_id.in_(sorted(links_to_remove)),
+            )
+        )
+    links_to_add = target_ids_set - current_link_group_ids
+    for group_id in sorted(links_to_add):
+        db.add(
+            TeacherAuthoredTestGroup(
+                test_id=int(custom_test.id),
+                group_id=int(group_id),
+            )
+        )
+
+    if custom_test.moderation_status != TestModerationStatus.approved:
+        db.execute(
+            delete(TestAssignment).where(
+                TestAssignment.test_id == int(custom_test.id),
+            )
+        )
+        return
+
+    current_assignment_group_ids = {
+        int(group_id)
+        for group_id in db.scalars(
+            select(TestAssignment.group_id).where(TestAssignment.test_id == int(custom_test.id))
+        ).all()
+    }
+    assignments_to_remove = current_assignment_group_ids - target_ids_set
+    if assignments_to_remove:
+        db.execute(
+            delete(TestAssignment).where(
+                TestAssignment.test_id == int(custom_test.id),
+                TestAssignment.group_id.in_(sorted(assignments_to_remove)),
+            )
+        )
+    assignments_to_add = target_ids_set - current_assignment_group_ids
+    for group_id in sorted(assignments_to_add):
+        db.add(
+            TestAssignment(
+                test_id=int(custom_test.id),
+                group_id=int(group_id),
+                assigned_by_membership_id=None,
+            )
+        )
+
+
+def _resolve_custom_test_groups(custom_test: TeacherAuthoredTest) -> list[Group]:
+    groups: list[Group] = []
+    for assignment in custom_test.assignments:
+        if assignment.group is not None:
+            groups.append(assignment.group)
+    if groups:
+        return groups
+
+    for link in custom_test.group_links:
+        if link.group is not None:
+            groups.append(link.group)
+    return groups
+
+
+def _resolve_custom_test_institution_id(*, db: DBSession, custom_test: TeacherAuthoredTest) -> int:
+    if custom_test.institution_id is not None:
+        return int(custom_test.institution_id)
+
+    group_institution_ids = {
+        int(group.institution_id)
+        for group in _resolve_custom_test_groups(custom_test)
+        if group.institution_id is not None
+    }
+    if len(group_institution_ids) == 1:
+        resolved = next(iter(group_institution_ids))
+        custom_test.institution_id = resolved
+        db.flush()
+        return resolved
+
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="Для модерации тест должен быть привязан к одному учебному учреждению.",
+    )

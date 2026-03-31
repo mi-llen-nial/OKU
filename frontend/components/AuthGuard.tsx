@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { getToken, getUser } from "@/lib/auth";
+import { resolveRoleHome } from "@/lib/navigation";
 import { tr, useUiLanguage } from "@/lib/i18n";
 import { UserRole } from "@/lib/types";
 
@@ -34,8 +35,13 @@ export default function AuthGuard({ roles, children }: AuthGuardProps) {
       return;
     }
 
+    if (user.role === "superadmin") {
+      setReady(true);
+      return;
+    }
+
     if (allowedRoles && !allowedRoles.includes(user.role)) {
-      router.replace(user.role === "teacher" ? "/teacher" : "/dashboard");
+      router.replace(resolveRoleHome(user.role));
       return;
     }
 

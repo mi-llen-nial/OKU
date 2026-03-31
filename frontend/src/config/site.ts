@@ -1,16 +1,4 @@
-const DEFAULT_SITE_URL = "https://oku.com.kz";
-
-function normalizeSiteUrl(raw: string | undefined): string {
-  const value = (raw || "").trim();
-  if (!value) return DEFAULT_SITE_URL;
-  try {
-    const parsed = new URL(value);
-    const protocol = parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.protocol : "https:";
-    return `${protocol}//${parsed.host}`;
-  } catch {
-    return DEFAULT_SITE_URL;
-  }
-}
+import { publicSiteOrigin } from "@/src/config/domains";
 
 export const siteConfig = {
   name: "OKU",
@@ -36,7 +24,8 @@ export const siteConfig = {
   },
 };
 
-export const siteUrl = normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
+/** Canonical public marketing origin (no trailing slash). Same as NEXT_PUBLIC_PUBLIC_SITE_URL / NEXT_PUBLIC_SITE_URL. */
+export const siteUrl = publicSiteOrigin;
 
 export function absoluteUrl(path = "/"): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;

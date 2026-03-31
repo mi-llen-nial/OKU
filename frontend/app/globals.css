@@ -70,6 +70,7 @@ body {
   font-family: var(--font-body);
   letter-spacing: 0.007em;
   font-weight: 350;
+  line-height: 1;
   color: var(--ink-strong);
   background: #ffffff;
 }
@@ -84,7 +85,7 @@ h5 {
 }
 
 p {
-  line-height: 1.5;
+  line-height: 1;
   font-weight: 350;
 }
 

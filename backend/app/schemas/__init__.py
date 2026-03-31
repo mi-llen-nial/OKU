@@ -41,6 +41,14 @@ from app.schemas.tests import (
     TestResponse,
     TestResultDetailsResponse,
 )
+from app.schemas.superadmin import (
+    BootstrapInviteCreateRequest,
+    BootstrapInviteResponse,
+    InstitutionCreateRequest,
+    InstitutionDetailsResponse,
+    InstitutionListItem,
+    InstitutionListResponse,
+)
 
 __all__ = [
     "AuthResponse",
@@ -85,4 +93,10 @@ __all__ = [
     "SubmitTestResponse",
     "TestResponse",
     "TestResultDetailsResponse",
+    "InstitutionCreateRequest",
+    "InstitutionListItem",
+    "InstitutionListResponse",
+    "InstitutionDetailsResponse",
+    "BootstrapInviteCreateRequest",
+    "BootstrapInviteResponse",
 ]

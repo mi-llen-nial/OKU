@@ -65,7 +65,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=2)",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)",
         ]
       interval: 15s
       timeout: 5s
@@ -91,7 +91,7 @@ services:
       REDIS_ENABLED: "true"
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-replace_me_with_32_characters_minimum_secret}
       JWT_REFRESH_SECRET_KEY: ${JWT_REFRESH_SECRET_KEY:-replace_me_with_32_characters_minimum_refresh_secret}
-    command: ["sh", "-c", "alembic upgrade head && rq worker default"]
+    command: ["rq", "worker", "default"]
     depends_on:
       db:
         condition: service_healthy
@@ -107,6 +107,10 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.oku.com.kz}
         NEXT_PUBLIC_API_PREFIX: ${PUBLIC_API_PREFIX:-/api/v1}
+        NEXT_PUBLIC_PUBLIC_SITE_URL: ${NEXT_PUBLIC_PUBLIC_SITE_URL:-https://oku.com.kz}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://app.oku.com.kz}
+        NEXT_PUBLIC_APP_HOSTNAME: ${NEXT_PUBLIC_APP_HOSTNAME:-app.oku.com.kz}
+        NEXT_PUBLIC_PUBLIC_HOSTNAME: ${NEXT_PUBLIC_PUBLIC_HOSTNAME:-oku.com.kz}
     container_name: oku-frontend
     restart: unless-stopped
     environment:
@@ -114,6 +118,11 @@ services:
       PORT: 3000
       NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.oku.com.kz}
       NEXT_PUBLIC_API_PREFIX: ${PUBLIC_API_PREFIX:-/api/v1}
+      NEXT_PUBLIC_PUBLIC_SITE_URL: ${NEXT_PUBLIC_PUBLIC_SITE_URL:-https://oku.com.kz}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_PUBLIC_SITE_URL:-https://oku.com.kz}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://app.oku.com.kz}
+      NEXT_PUBLIC_APP_HOSTNAME: ${NEXT_PUBLIC_APP_HOSTNAME:-app.oku.com.kz}
+      NEXT_PUBLIC_PUBLIC_HOSTNAME: ${NEXT_PUBLIC_PUBLIC_HOSTNAME:-oku.com.kz}
     depends_on:
       backend:
         condition: service_healthy

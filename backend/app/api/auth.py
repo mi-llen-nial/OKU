@@ -1,7 +1,8 @@
+import re
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, func, select
 
 from app.core.config import settings
@@ -15,26 +16,87 @@ from app.core.security import (
     hash_refresh_token,
     verify_password,
 )
-from app.models import Group, GroupMembership, PreferredLanguage, StudentProfile, User, UserRole, UserSession
+from app.models import (
+    Group,
+    GroupMembership,
+    Institution,
+    InstitutionAdminBootstrapInvite,
+    InstitutionMembership,
+    InstitutionMembershipRole,
+    InstitutionMembershipStatus,
+    PreferredLanguage,
+    StudentProfile,
+    User,
+    UserRole,
+    UserSession,
+)
 from app.schemas.auth import (
     AuthResponse,
     EducationLevel,
+    InstitutionAdminBootstrapAcceptRequest,
+    InstitutionCodeLookupResponse,
     LoginRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetConfirmResponse,
+    PasswordResetRequestPayload,
+    PasswordResetRequestResponse,
     RefreshTokenRequest,
     RegisterRequest,
     SendRegisterCodeRequest,
     SendRegisterCodeResponse,
     TokenRefreshResponse,
+    UsernameAvailabilityResponse,
     UserResponse,
 )
+from app.services.audit_logs import audit_log_service
+from app.services.notifications import notification_service
 from app.services.email_verification import (
     EmailVerificationError,
     EmailVerificationProviderError,
     EmailVerificationRateLimitError,
     email_verification_service,
 )
+from app.services.password_reset import PasswordResetError, password_reset_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_REGISTER_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,25}$")
+
+
+@router.get("/register/username-available", response_model=UsernameAvailabilityResponse)
+def register_username_available(
+    db: DBSession,
+    username: str = Query(..., min_length=1, max_length=32),
+) -> UsernameAvailabilityResponse:
+    """Публичная проверка: формат никнейма и отсутствие занятого имени (без учёта регистра)."""
+    normalized = username.strip()
+    if not _REGISTER_USERNAME_RE.fullmatch(normalized):
+        return UsernameAvailabilityResponse(available=False, reason="invalid")
+    exists = db.scalar(select(User.id).where(func.lower(User.username) == normalized.lower()))
+    if exists:
+        return UsernameAvailabilityResponse(available=False, reason="taken")
+    return UsernameAvailabilityResponse(available=True)
+
+
+@router.get("/register/institution-code", response_model=InstitutionCodeLookupResponse)
+def register_institution_code_lookup(
+    db: DBSession,
+    code: str = Query(..., min_length=1, max_length=64),
+) -> InstitutionCodeLookupResponse:
+    """Публичная проверка кода учебного учреждения для заявки преподавателя."""
+    raw = code.strip()
+    if not raw:
+        return InstitutionCodeLookupResponse(valid=False)
+    institution = db.scalar(
+        select(Institution).where(
+            Institution.is_active.is_(True),
+            Institution.join_code.is_not(None),
+            func.lower(Institution.join_code) == func.lower(raw),
+        )
+    )
+    if institution is None:
+        return InstitutionCodeLookupResponse(valid=False)
+    return InstitutionCodeLookupResponse(valid=True, institution_id=int(institution.id), name=str(institution.name))
 
 
 @router.post("/register", response_model=AuthResponse)
@@ -50,19 +112,11 @@ def register(payload: RegisterRequest, request: Request, response: Response, db:
     if username_exists:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пользователь с таким именем пользователя уже существует")
 
-    if payload.role == UserRole.teacher:
-        configured_admin_key = (settings.admin_key or "").strip()
-        provided_admin_key = (payload.admin_key or "").strip()
-        if not configured_admin_key:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Регистрация преподавателей временно недоступна. Обратитесь к администратору платформы.",
-            )
-        if configured_admin_key != provided_admin_key:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Неверный ключ администратора.",
-            )
+    if payload.role in {UserRole.methodist, UserRole.institution_admin, UserRole.superadmin}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Регистрация этой роли через публичную форму недоступна.",
+        )
 
     if settings.email_verification_enabled:
         if not payload.email_verification_code:
@@ -82,12 +136,16 @@ def register(payload: RegisterRequest, request: Request, response: Response, db:
                 detail="Неверный или истекший код подтверждения почты.",
             )
 
+    # Public sign-up never grants elevated institutional roles directly.
+    # Teacher onboarding is handled via teacher application flow after account creation.
+    effective_role = UserRole.student
+
     user = User(
         email=email_value,
         full_name=payload.full_name,
         username=username_value,
         password_hash=get_password_hash(payload.password),
-        role=payload.role,
+        role=effective_role,
     )
     db.add(user)
     db.flush()
@@ -140,6 +198,30 @@ def login(payload: LoginRequest, request: Request, response: Response, db: DBSes
         user=user,
         remember_me=payload.remember_me,
     )
+
+
+@router.post("/password-reset/request", response_model=PasswordResetRequestResponse)
+def password_reset_request(payload: PasswordResetRequestPayload, db: DBSession) -> PasswordResetRequestResponse:
+    try:
+        message = password_reset_service.request_password_reset(db=db, email=payload.email)
+    except PasswordResetError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return PasswordResetRequestResponse(message=message)
+
+
+@router.post("/password-reset/confirm", response_model=PasswordResetConfirmResponse)
+def password_reset_confirm(payload: PasswordResetConfirmRequest, db: DBSession) -> PasswordResetConfirmResponse:
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пароли должны совпадать.")
+
+    try:
+        message = password_reset_service.confirm_password_reset(
+            db=db, token=payload.token, new_password=payload.new_password
+        )
+    except PasswordResetError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return PasswordResetConfirmResponse(message=message)
 
 
 @router.post("/register/send-code", response_model=SendRegisterCodeResponse)
@@ -215,6 +297,108 @@ def refresh_tokens(
         return TokenRefreshResponse(access_token=access_token, refresh_token=None)
 
     return TokenRefreshResponse(access_token=access_token, refresh_token=new_refresh_token)
+
+
+@router.post("/bootstrap/institution-admin/accept", response_model=AuthResponse)
+def accept_institution_admin_bootstrap(
+    payload: InstitutionAdminBootstrapAcceptRequest,
+    request: Request,
+    response: Response,
+    db: DBSession,
+) -> AuthResponse:
+    email_value = payload.email.strip().lower()
+    token_value = payload.token.strip()
+    if not token_value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Токен приглашения обязателен.")
+
+    invite_hash = hash_refresh_token(token_value)
+    invite = db.scalar(
+        select(InstitutionAdminBootstrapInvite).where(InstitutionAdminBootstrapInvite.token_hash == invite_hash)
+    )
+    if invite is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Приглашение не найдено.")
+    if invite.revoked_at is not None:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Приглашение отозвано.")
+    now = datetime.now(timezone.utc)
+    if invite.expires_at <= now:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Срок действия приглашения истек.")
+    if invite.consumed_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Приглашение уже использовано.")
+    if invite.email.strip().lower() != email_value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email не совпадает с приглашением.")
+
+    institution = db.get(Institution, int(invite.institution_id))
+    if institution is None or not institution.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Учреждение не найдено.")
+
+    user = db.scalar(select(User).where(func.lower(User.email) == email_value))
+    if user is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Пользователь с таким email уже существует. Используйте вход и обратитесь к платформе для назначения прав.",
+        )
+
+    username_value = payload.username.strip()
+    username_exists = db.scalar(select(User).where(func.lower(User.username) == username_value.lower()))
+    if username_exists:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пользователь с таким именем пользователя уже существует")
+
+    user = User(
+        email=email_value,
+        full_name=payload.full_name.strip(),
+        username=username_value,
+        password_hash=get_password_hash(payload.password),
+        role=UserRole.institution_admin,
+    )
+    db.add(user)
+    db.flush()
+
+    membership = InstitutionMembership(
+        user_id=int(user.id),
+        institution_id=int(institution.id),
+        role=InstitutionMembershipRole.institution_admin,
+        status=InstitutionMembershipStatus.active,
+        is_primary=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(membership)
+
+    invite.consumed_by_user_id = int(user.id)
+    invite.consumed_at = now
+
+    notification_service.create(
+        db=db,
+        user_id=int(user.id),
+        institution_id=int(institution.id),
+        notification_type="institution_admin_bootstrapped",
+        title="Доступ администратора учреждения активирован",
+        message=f"Вы назначены администратором учреждения {institution.name}.",
+        data={"institution_id": int(institution.id)},
+    )
+    audit_log_service.record(
+        db=db,
+        actor_user_id=int(invite.created_by_user_id) if invite.created_by_user_id is not None else None,
+        institution_id=int(institution.id),
+        action="institution_admin_bootstrap_invite_consumed",
+        target_type="institution_admin_bootstrap_invite",
+        target_id=int(invite.id),
+        metadata={"user_id": int(user.id), "email": email_value},
+    )
+    audit_log_service.record(
+        db=db,
+        actor_user_id=int(user.id),
+        institution_id=int(institution.id),
+        action="institution_admin_granted",
+        target_type="institution_membership",
+        target_id="new",
+        metadata={"user_id": int(user.id), "membership_role": "institution_admin"},
+    )
+    db.commit()
+    db.refresh(user)
+
+    access_token, refresh_token = _create_tokens_for_user(db=db, user_id=user.id, request=request, remember_me=True)
+    return _build_auth_response(response=response, access_token=access_token, refresh_token=refresh_token, user=user)
 
 
 def _build_user_response(user: User) -> UserResponse:

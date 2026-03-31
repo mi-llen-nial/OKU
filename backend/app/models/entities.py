@@ -26,6 +26,9 @@ from app.db.base import Base
 class UserRole(str, enum.Enum):
     student = "student"
     teacher = "teacher"
+    methodist = "methodist"
+    institution_admin = "institution_admin"
+    superadmin = "superadmin"
 
 
 class PreferredLanguage(str, enum.Enum):
@@ -59,11 +62,76 @@ class InvitationStatus(str, enum.Enum):
     declined = "declined"
 
 
+class InstitutionMembershipRole(str, enum.Enum):
+    student = "student"
+    teacher = "teacher"
+    methodist = "methodist"
+    institution_admin = "institution_admin"
+
+
+class InstitutionMembershipStatus(str, enum.Enum):
+    pending = "pending"
+    active = "active"
+    suspended = "suspended"
+    revoked = "revoked"
+
+
+class TeacherApplicationStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+    suspended = "suspended"
+    revoked = "revoked"
+
+
+class TestModerationStatus(str, enum.Enum):
+    draft = "draft"
+    submitted_for_review = "submitted_for_review"
+    in_review = "in_review"
+    needs_revision = "needs_revision"
+    approved = "approved"
+    rejected = "rejected"
+    archived = "archived"
+
+
 class CatalogQuestionStatus(str, enum.Enum):
     draft = "draft"
     validated = "validated"
     published = "published"
     archived = "archived"
+
+
+class Institution(Base):
+    __tablename__ = "institutions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    normalized_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    join_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    memberships: Mapped[list[InstitutionMembership]] = relationship(
+        back_populates="institution",
+        cascade="all, delete-orphan",
+    )
+    groups: Mapped[list[Group]] = relationship(back_populates="institution")
+    teacher_applications: Mapped[list[TeacherApplication]] = relationship(
+        back_populates="institution",
+        cascade="all, delete-orphan",
+    )
+    notifications: Mapped[list[Notification]] = relationship(
+        back_populates="institution",
+        cascade="all, delete-orphan",
+    )
+    audit_logs: Mapped[list[AuditLog]] = relationship(back_populates="institution", cascade="all, delete-orphan")
+    custom_tests: Mapped[list[TeacherAuthoredTest]] = relationship(back_populates="institution")
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
 
 
 class User(Base):
@@ -82,6 +150,24 @@ class User(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    institution_memberships: Mapped[list[InstitutionMembership]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    submitted_teacher_applications: Mapped[list[TeacherApplication]] = relationship(
+        back_populates="applicant",
+        foreign_keys="TeacherApplication.applicant_user_id",
+        cascade="all, delete-orphan",
+    )
+    reviewed_teacher_applications: Mapped[list[TeacherApplication]] = relationship(
+        back_populates="reviewer",
+        foreign_keys="TeacherApplication.reviewer_user_id",
+    )
+    received_notifications: Mapped[list[Notification]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    audit_events: Mapped[list[AuditLog]] = relationship(back_populates="actor")
     tests: Mapped[list[Test]] = relationship(back_populates="student", cascade="all, delete-orphan")
     memberships: Mapped[list[GroupMembership]] = relationship(back_populates="student", cascade="all, delete-orphan")
     groups_created: Mapped[list[Group]] = relationship(back_populates="teacher")
@@ -135,22 +221,203 @@ class EmailVerificationCode(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
-class Group(Base):
-    __tablename__ = "groups"
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class InstitutionMembership(Base):
+    __tablename__ = "institution_memberships"
+    __table_args__ = (
+        UniqueConstraint("user_id", "institution_id", "role", name="uq_institution_membership_user_role"),
+        Index("ix_institution_membership_user_institution", "user_id", "institution_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[InstitutionMembershipRole] = mapped_column(
+        Enum(
+            InstitutionMembershipRole,
+            name="institution_membership_role",
+            create_type=False,
+        ),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[InstitutionMembershipStatus] = mapped_column(
+        Enum(
+            InstitutionMembershipStatus,
+            name="institution_membership_status",
+            create_type=False,
+        ),
+        nullable=False,
+        default=InstitutionMembershipStatus.active,
+        index=True,
+    )
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[User] = relationship(back_populates="institution_memberships")
+    institution: Mapped[Institution] = relationship(back_populates="memberships")
+    assigned_groups: Mapped[list[GroupTeacherAssignment]] = relationship(
+        back_populates="teacher_membership",
+        cascade="all, delete-orphan",
+        foreign_keys="GroupTeacherAssignment.teacher_membership_id",
+    )
+    assigned_by_group_links: Mapped[list[GroupTeacherAssignment]] = relationship(
+        back_populates="assigned_by_membership",
+        foreign_keys="GroupTeacherAssignment.assigned_by_membership_id",
+    )
+    review_requests_authored: Mapped[list[TestReviewRequest]] = relationship(
+        back_populates="requested_by_membership",
+        foreign_keys="TestReviewRequest.requested_by_membership_id",
+    )
+    review_requests_handled: Mapped[list[TestReviewRequest]] = relationship(
+        back_populates="reviewer_membership",
+        foreign_keys="TestReviewRequest.reviewer_membership_id",
+    )
+    test_assignments: Mapped[list[TestAssignment]] = relationship(
+        back_populates="assigned_by_membership",
+        foreign_keys="TestAssignment.assigned_by_membership_id",
+    )
+
+
+class InstitutionAdminBootstrapInvite(Base):
+    __tablename__ = "institution_admin_bootstrap_invites"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_institution_admin_bootstrap_invite_token_hash"),
+        Index("ix_institution_admin_bootstrap_invites_institution_id", "institution_id"),
+        Index("ix_institution_admin_bootstrap_invites_email", "email"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    consumed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    institution: Mapped[Institution] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
+    consumed_by: Mapped[User | None] = relationship(foreign_keys=[consumed_by_user_id])
+
+
+class TeacherApplication(Base):
+    __tablename__ = "teacher_applications"
+    __table_args__ = (
+        Index("ix_teacher_applications_institution_status", "institution_id", "status"),
+        Index("ix_teacher_applications_applicant_status", "applicant_user_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    applicant_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    position: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    additional_info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[TeacherApplicationStatus] = mapped_column(
+        Enum(
+            TeacherApplicationStatus,
+            name="teacher_application_status",
+            create_type=False,
+        ),
+        nullable=False,
+        default=TeacherApplicationStatus.pending,
+        index=True,
+    )
+    reviewer_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewer_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    applicant: Mapped[User] = relationship(
+        back_populates="submitted_teacher_applications",
+        foreign_keys=[applicant_user_id],
+    )
+    reviewer: Mapped[User | None] = relationship(
+        back_populates="reviewed_teacher_applications",
+        foreign_keys=[reviewer_user_id],
+    )
+    institution: Mapped[Institution] = relationship(back_populates="teacher_applications")
+
+
+class Group(Base):
+    __tablename__ = "groups"
+    __table_args__ = (
+        UniqueConstraint("institution_id", "name", name="uq_group_name_per_institution"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
     teacher_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True)
 
     profiles: Mapped[list[StudentProfile]] = relationship(back_populates="group")
     memberships: Mapped[list[GroupMembership]] = relationship(back_populates="group", cascade="all, delete-orphan")
     teacher: Mapped[User | None] = relationship(back_populates="groups_created")
+    institution: Mapped[Institution | None] = relationship(back_populates="groups")
+    teacher_assignments: Mapped[list[GroupTeacherAssignment]] = relationship(
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
     invitations: Mapped[list[GroupInvitation]] = relationship(back_populates="group")
     invite_links: Mapped[list[GroupInviteLink]] = relationship(
         back_populates="group",
         cascade="all, delete-orphan",
     )
     custom_test_links: Mapped[list[TeacherAuthoredTestGroup]] = relationship(
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
+    test_assignments: Mapped[list[TestAssignment]] = relationship(
         back_populates="group",
         cascade="all, delete-orphan",
     )
@@ -233,10 +500,35 @@ class TeacherAuthoredTest(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     time_limit_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     warning_limit: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    moderation_status: Mapped[TestModerationStatus] = mapped_column(
+        Enum(
+            TestModerationStatus,
+            name="test_moderation_status",
+            create_type=False,
+        ),
+        default=TestModerationStatus.draft,
+        nullable=False,
+        index=True,
+    )
+    moderation_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submitted_for_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_membership_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institution_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    current_draft_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    approved_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -245,7 +537,17 @@ class TeacherAuthoredTest(Base):
     )
 
     teacher: Mapped[User] = relationship(back_populates="custom_tests_created")
+    institution: Mapped[Institution | None] = relationship(back_populates="custom_tests")
     group_links: Mapped[list[TeacherAuthoredTestGroup]] = relationship(
+        back_populates="test",
+        cascade="all, delete-orphan",
+    )
+    review_requests: Mapped[list[TestReviewRequest]] = relationship(
+        back_populates="test",
+        cascade="all, delete-orphan",
+        order_by="TestReviewRequest.created_at.desc()",
+    )
+    assignments: Mapped[list[TestAssignment]] = relationship(
         back_populates="test",
         cascade="all, delete-orphan",
     )
@@ -275,6 +577,169 @@ class TeacherAuthoredQuestion(Base):
     correct_answer_json: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     test: Mapped[TeacherAuthoredTest] = relationship(back_populates="questions")
+
+
+class GroupTeacherAssignment(Base):
+    __tablename__ = "group_teacher_assignments"
+    __table_args__ = (
+        UniqueConstraint("group_id", "teacher_membership_id", name="uq_group_teacher_assignment"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    teacher_membership_id: Mapped[int] = mapped_column(
+        ForeignKey("institution_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assigned_by_membership_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institution_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    group: Mapped[Group] = relationship(back_populates="teacher_assignments")
+    teacher_membership: Mapped[InstitutionMembership] = relationship(
+        back_populates="assigned_groups",
+        foreign_keys=[teacher_membership_id],
+    )
+    assigned_by_membership: Mapped[InstitutionMembership | None] = relationship(
+        back_populates="assigned_by_group_links",
+        foreign_keys=[assigned_by_membership_id],
+    )
+
+
+class TestReviewRequest(Base):
+    __tablename__ = "test_review_requests"
+    __table_args__ = (
+        Index("ix_test_review_requests_institution_status", "institution_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    test_id: Mapped[int] = mapped_column(
+        ForeignKey("teacher_authored_tests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    submitted_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[TestModerationStatus] = mapped_column(
+        Enum(
+            TestModerationStatus,
+            name="test_moderation_status",
+            create_type=False,
+        ),
+        nullable=False,
+        index=True,
+    )
+    requested_by_membership_id: Mapped[int] = mapped_column(
+        ForeignKey("institution_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    reviewer_membership_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institution_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    test: Mapped[TeacherAuthoredTest] = relationship(back_populates="review_requests")
+    requested_by_membership: Mapped[InstitutionMembership] = relationship(
+        back_populates="review_requests_authored",
+        foreign_keys=[requested_by_membership_id],
+    )
+    reviewer_membership: Mapped[InstitutionMembership | None] = relationship(
+        back_populates="review_requests_handled",
+        foreign_keys=[reviewer_membership_id],
+    )
+
+
+class TestAssignment(Base):
+    __tablename__ = "test_assignments"
+    __table_args__ = (
+        UniqueConstraint("test_id", "group_id", name="uq_test_assignment_test_group"),
+        Index("ix_test_assignments_group_id", "group_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    test_id: Mapped[int] = mapped_column(
+        ForeignKey("teacher_authored_tests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    assigned_by_membership_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institution_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    test: Mapped[TeacherAuthoredTest] = relationship(back_populates="assignments")
+    group: Mapped[Group] = relationship(back_populates="test_assignments")
+    assigned_by_membership: Mapped[InstitutionMembership | None] = relationship(
+        back_populates="test_assignments",
+        foreign_keys=[assigned_by_membership_id],
+    )
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_is_read", "user_id", "is_read"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    data_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user: Mapped[User] = relationship(back_populates="received_notifications")
+    institution: Mapped[Institution | None] = relationship(back_populates="notifications")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_institution_action", "institution_id", "action", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    actor_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    institution: Mapped[Institution | None] = relationship(back_populates="audit_logs")
+    actor: Mapped[User | None] = relationship(back_populates="audit_events")
 
 
 class StudentProfile(Base):

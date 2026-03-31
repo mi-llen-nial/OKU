@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.models import DifficultyLevel, PreferredLanguage
+from app.models import DifficultyLevel, PreferredLanguage, TestModerationStatus
 
 
 AnswerType = Literal["choice", "free_text"]
@@ -81,8 +81,12 @@ class TeacherCustomTestCreateRequest(BaseModel):
     duration_minutes: int = Field(ge=1, le=300)
     warning_limit: int = Field(ge=0, le=20, default=0)
     due_date: date | None = None
-    group_ids: list[int] = Field(default_factory=list, min_length=1, max_length=20)
+    group_ids: list[int] = Field(default_factory=list, max_length=20)
     questions: list[TeacherCustomQuestionInput] = Field(min_length=1, max_length=120)
+
+
+class TeacherCustomTestUpdateRequest(TeacherCustomTestCreateRequest):
+    pass
 
 
 class TeacherCustomMaterialGenerateRequest(BaseModel):
@@ -139,6 +143,12 @@ class TeacherCustomTestListItem(BaseModel):
     due_date: date | None = None
     questions_count: int
     groups: list[TeacherCustomGroupBrief] = Field(default_factory=list)
+    moderation_status: TestModerationStatus = TestModerationStatus.draft
+    moderation_comment: str | None = None
+    submitted_for_review_at: datetime | None = None
+    reviewed_at: datetime | None = None
+    current_draft_version: int = 1
+    approved_version: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -173,3 +183,20 @@ class TeacherCustomTestResultsResponse(BaseModel):
     due_date: date | None = None
     groups: list[TeacherCustomTestResultsGroupItem] = Field(default_factory=list)
     students: list[TeacherCustomTestResultsStudentItem] = Field(default_factory=list)
+
+
+class TeacherCustomTestSubmitReviewResponse(BaseModel):
+    test_id: int
+    status: TestModerationStatus
+    current_draft_version: int
+    submitted_for_review_at: datetime
+
+
+class TeacherCustomTestAssignRequest(BaseModel):
+    group_ids: list[int] = Field(default_factory=list, min_length=1, max_length=100)
+
+
+class TeacherCustomTestAssignResponse(BaseModel):
+    test_id: int
+    status: TestModerationStatus
+    assigned_group_ids: list[int] = Field(default_factory=list)

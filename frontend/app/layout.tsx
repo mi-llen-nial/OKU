@@ -11,6 +11,8 @@ const bodyFont = Inter({
   subsets: ["latin", "cyrillic"],
   variable: "--font-body",
   display: "swap",
+  /** Variable Inter — в CSS можно задавать 350 (regular по макету) и 500 (medium) */
+  weight: "variable",
 });
 
 export const metadata: Metadata = {
@@ -116,7 +118,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="ru">
-      <body className={bodyFont.variable} style={cssVars}>
+      <body className={`${bodyFont.className} ${bodyFont.variable}`} style={cssVars}>
         <Script id="microsoft-clarity" strategy="afterInteractive">
           {`
             (function(c,l,a,r,i,t,y){
